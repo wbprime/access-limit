@@ -15,9 +15,7 @@
     <dependencies>
         <dependency>
             <groupId>com.bj58.arch.baseservice</groupId>
-            <artifactId>access-limit-impl</artifactId>
-            <version>0.0.1-SNAPSHOT</version>
-            <optional>true</optional>
+            <artifactId>access-limit-processor</artifactId>
         </dependency>
 
         <dependency>
@@ -38,23 +36,6 @@
         </dependency>
 
         <dependency>
-            <groupId>javax.inject</groupId>
-            <artifactId>javax.inject</artifactId>
-            <version>1</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.google.auto</groupId>
-            <artifactId>auto-common</artifactId>
-            <version>0.8</version>
-        </dependency>
-        <dependency>
-            <groupId>com.google.auto.service</groupId>
-            <artifactId>auto-service</artifactId>
-            <version>1.0-rc3</version>
-        </dependency>
-
-        <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
         </dependency>
@@ -62,7 +43,6 @@
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <!--<scope>test</scope>-->
         </dependency>
 
         <!-- Test -->

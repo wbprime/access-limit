@@ -1,7 +1,7 @@
 package com.bj58.arch.baseservice.accesslimit.demo;
 
-import com.bj58.arch.baseservice.accesslimit.api.AccessLimit;
-import com.bj58.arch.baseservice.accesslimit.api.EnableAccessLimit;
+import com.bj58.arch.baseservice.accesslimit.processor.AccessLimit;
+import com.bj58.arch.baseservice.accesslimit.processor.EnableAccessLimit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -17,7 +17,7 @@
     <parent>
         <groupId>com.bj58.arch.baseservice</groupId>
         <artifactId>wbprime-maven-parent</artifactId>
-        <version>1.0.3</version>
+        <version>1.0.4</version>
     </parent>
 
     <modules>
@@ -29,6 +29,7 @@
     <properties>
         <acccess_limit_core_version>0.0.1-SNAPSHOT</acccess_limit_core_version>
         <acccess_limit_processor_version>0.0.1-SNAPSHOT</acccess_limit_processor_version>
+        <acccess_limit_demo_version>0.0.1-SNAPSHOT</acccess_limit_demo_version>
     </properties>
 
     <dependencyManagement>
@@ -42,6 +43,11 @@
                 <groupId>com.bj58.arch.baseservice</groupId>
                 <artifactId>access-limit-processor</artifactId>
                 <version>${acccess_limit_processor_version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.bj58.arch.baseservice</groupId>
+                <artifactId>access-limit-demo</artifactId>
+                <version>${acccess_limit_demo_version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
