@@ -9,6 +9,11 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map;
 
+import javax.annotation.CheckForNull;
+import javax.annotation.CheckForSigned;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 /**
  * TODO add brief description here
  *
@@ -17,19 +22,20 @@ import java.util.Map;
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
 @EnableAccessLimit
+//@EnableScfSupport
 public class DemoServiceImpl implements DemoService {
     private static final Logger LOGGER = LoggerFactory.getLogger(DemoServiceImpl.class);
 
     @Override
     @AccessLimit(limit = 30)
     @Deprecated
-    public void demoMethod1(int arg1, String arg2, Map<String, Long> arg3) {
+    public void demoMethod1(int arg1, String arg2, @Nonnull Map<String, Long> arg3) {
         LOGGER.info("DemoServiceImpl#demoMethod1 invoked");
     }
 
     @Override
     @AccessLimit(limit = 30, weight = 16)
-    public void demoMethod2(short arg1, byte[] arg2, List<Integer> arg3) {
+    public void demoMethod2(@CheckForSigned short arg1, @Nullable @CheckForNull byte[] arg2, List<Integer> arg3) {
         LOGGER.info("DemoServiceImpl#demoMethod2 invoked");
     }
 }
