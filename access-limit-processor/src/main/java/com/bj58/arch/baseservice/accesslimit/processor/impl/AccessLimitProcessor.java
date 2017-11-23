@@ -5,20 +5,30 @@ import com.google.auto.service.AutoService;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
+import com.bj58.arch.baseservice.accesslimit.core.QpsLimiter;
 import com.bj58.arch.baseservice.accesslimit.processor.AccessLimit;
 import com.bj58.arch.baseservice.accesslimit.processor.EnableAccessLimit;
-import com.bj58.arch.baseservice.accesslimit.core.QpsLimiter;
+import com.bj58.arch.baseservice.accesslimit.processor.EnableScfSupport;
+import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
+import com.squareup.javapoet.ParameterSpec;
+import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
+import com.squareup.javapoet.TypeVariableName;
+
+import org.joda.time.DateTime;
+import org.joda.time.format.ISODateTimeFormat;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 
+import javax.annotation.Generated;
 import javax.annotation.Nullable;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
@@ -29,12 +39,17 @@ import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
+import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.TypeParameterElement;
+import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.type.TypeVariable;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 
@@ -141,29 +156,44 @@ public class AccessLimitProcessor extends AbstractProcessor {
             }
         }
 
+        final String originPackageName = packageNameOf(element);
+        final ClassName originClass = ClassName.get(originPackageName, originClassName);
+
+        // Check @EnableScfSupport annotation
         {
-            final String originPackageName = packageNameOf(element);
-            final ClassName originClass = ClassName.get(originPackageName, originClassName);
-            typeBuilder.superclass(originClass);
-            typeBuilder.addField(
-                    FieldSpec.builder(
-                            originClass, adapteeVarName(), Modifier.PRIVATE, Modifier.FINAL
-                    ).initializer("new $T()", originClass).build()
-            );
-            for (final AccessLimitMethodConfig methodConfig : methodConfigs) {
-                typeBuilder.addField(
-                        FieldSpec.builder(
-                                ClassName.get(QpsLimiter.class),
-                                accessLimiterVarName(methodConfig.index()),
-                                Modifier.PRIVATE, Modifier.FINAL
-                        ).initializer(
-                                "new $T($L, $L)",
-                                QpsLimiter.class,
-                                methodConfig.seconds(),
-                                methodConfig.limit()
-                        ).build()
+            final EnableScfSupport scfSupportAnno = element.getAnnotation(EnableScfSupport.class);
+            if (null != scfSupportAnno) {
+                typeBuilder.addAnnotation(
+                        AnnotationSpec.builder(ClassName.get("com.bj58.spat.scf.server.contract.annotation", "ServiceContract")).build()
                 );
             }
+        }
+
+        typeBuilder.superclass(originClass)
+                .addAnnotation(
+                        AnnotationSpec.builder(ClassName.get(Generated.class))
+                                .addMember("value", "$S", getClass().getCanonicalName())
+                                .addMember("date", "$S", DateTime.now().toString(ISODateTimeFormat.dateTime()))
+                                .build()
+                )
+                .addField(
+                        FieldSpec.builder(originClass, adapteeVarName(), Modifier.PRIVATE, Modifier.FINAL)
+                                .initializer("new $T()", originClass)
+                                .build()
+                );
+        for (final AccessLimitMethodConfig methodConfig : methodConfigs) {
+            typeBuilder.addField(
+                    FieldSpec.builder(
+                            ClassName.get(QpsLimiter.class),
+                            accessLimiterVarName(methodConfig.index()),
+                            Modifier.PRIVATE, Modifier.FINAL
+                    ).initializer(
+                            "new $T($L, $L)",
+                            QpsLimiter.class,
+                            methodConfig.seconds(),
+                            methodConfig.limit()
+                    ).build()
+            );
         }
 
         return typeBuilder.build();
@@ -176,7 +206,7 @@ public class AccessLimitProcessor extends AbstractProcessor {
         final String curMethodName = element.getSimpleName().toString();
 
         // Do not add access limit protection for unnecessary modified method
-        final Set<Modifier> modifiers = element.getModifiers();
+        Set<Modifier> modifiers = element.getModifiers();
         if (modifiers.containsAll(ImmutableSet.of(Modifier.ABSTRACT, Modifier.FINAL, Modifier.PRIVATE, Modifier.STATIC))) {
             return null;
         }
@@ -191,9 +221,62 @@ public class AccessLimitProcessor extends AbstractProcessor {
             argsStr = Joiner.on(", ").join(parameterNames);
         }
 
-        final MethodSpec.Builder methodBuilder = MethodSpec.overriding(element);
+        final MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(curMethodName);
 
-        methodBuilder.addStatement("$L.acquire($L)", accessLimiterVarName(methodConfig.index()), methodConfig.weight())
+        // Method level modifiers
+        {
+            modifiers = Sets.newLinkedHashSet(modifiers);
+            modifiers.remove(Modifier.ABSTRACT);
+            methodBuilder.addModifiers(modifiers);
+        }
+
+        // Returning
+        {
+            methodBuilder.returns(TypeName.get(element.getReturnType()));
+        }
+
+        // Parameter types
+        {
+            for (TypeParameterElement typeParameterElement : element.getTypeParameters()) {
+                TypeVariable var = (TypeVariable) typeParameterElement.asType();
+                methodBuilder.addTypeVariable(TypeVariableName.get(var));
+            }
+        }
+
+        // Parameters
+        {
+            final List<ParameterSpec> result = Lists.newArrayList();
+            for (final VariableElement parameter : element.getParameters()) {
+                final ParameterSpec.Builder builder = ParameterSpec.builder(
+                        TypeName.get(parameter.asType()), parameter.getSimpleName().toString()
+                );
+
+                for (final AnnotationMirror annotationMirror : parameter.getAnnotationMirrors()) {
+                    builder.addAnnotation(AnnotationSpec.get(annotationMirror));
+                }
+
+                builder.addModifiers(parameter.getModifiers());
+
+                result.add(builder.build());
+            }
+            methodBuilder.addParameters(result);
+        }
+
+        // VarArg
+        {
+            methodBuilder.varargs(element.isVarArgs());
+        }
+
+        // Throwing exceptions
+        {
+            for (TypeMirror thrownType : element.getThrownTypes()) {
+                methodBuilder.addException(TypeName.get(thrownType));
+            }
+        }
+
+        // Implementation code block
+        methodBuilder.addAnnotation(Override.class)
+                .addStatement("$L.acquire($L)", accessLimiterVarName(methodConfig.index()), methodConfig.weight())
                 .beginControlFlow("try")
                 .addStatement("$L.$L(" + argsStr + ")", adapteeVarName(), curMethodName)
                 .endControlFlow()
@@ -205,7 +288,7 @@ public class AccessLimitProcessor extends AbstractProcessor {
     }
 
     private String adapteeVarName() {
-        return "adaptee4Method";
+        return "adaptee";
     }
 
     private String accessLimiterVarName(final int idx) {
