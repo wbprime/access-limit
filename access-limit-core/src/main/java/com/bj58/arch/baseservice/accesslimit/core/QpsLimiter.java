@@ -9,13 +9,13 @@ import java.util.concurrent.TimeUnit;
  *
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
-public class QpsLimiter {
+public class QpsLimiter implements QpsAdjustable {
     private final WalkingClock clock;
     private final SleepingTimer timer;
 
     private final long microsPerMeasure;
 
-    private final int permitsPerMeasure;
+    private volatile int permitsPerMeasure;
 
     private final Object mutex = new Object();
     private volatile long nextFreeMicros;
@@ -35,6 +35,11 @@ public class QpsLimiter {
         this.timer = timer;
         this.permitsPerMeasure = permits;
         this.microsPerMeasure = TimeUnit.SECONDS.toMicros(seconds);
+    }
+
+    @Override
+    public void adjust(final double qps) {
+        permitsPerMeasure = (int) (qps * TimeUnit.SECONDS.toMicros(1) * microsPerMeasure);
     }
 
     public void acquire(final int val) {

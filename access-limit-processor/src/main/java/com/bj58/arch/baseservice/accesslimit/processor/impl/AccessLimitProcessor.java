@@ -3,16 +3,19 @@ package com.bj58.arch.baseservice.accesslimit.processor.impl;
 import com.google.auto.common.MoreElements;
 import com.google.auto.service.AutoService;
 import com.google.common.base.Joiner;
-import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 
+import com.bj58.arch.baseservice.accesslimit.core.AccessEvent;
+import com.bj58.arch.baseservice.accesslimit.core.AccessManagers;
 import com.bj58.arch.baseservice.accesslimit.core.QpsLimiter;
+import com.bj58.arch.baseservice.accesslimit.core.QpsManager;
 import com.bj58.arch.baseservice.accesslimit.processor.AccessLimit;
 import com.bj58.arch.baseservice.accesslimit.processor.EnableAccessLimit;
 import com.bj58.arch.baseservice.accesslimit.processor.EnableScfSupport;
 import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.CodeBlock;
 import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
@@ -27,9 +30,10 @@ import org.joda.time.format.ISODateTimeFormat;
 import java.io.IOException;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Generated;
-import javax.annotation.Nullable;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
@@ -50,10 +54,7 @@ import javax.lang.model.element.TypeParameterElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.type.TypeVariable;
-import javax.lang.model.util.Elements;
-import javax.lang.model.util.Types;
-
-import static com.google.common.base.Preconditions.checkState;
+import javax.tools.Diagnostic;
 
 /**
  * TODO add brief description here
@@ -63,8 +64,7 @@ import static com.google.common.base.Preconditions.checkState;
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
 @SupportedAnnotationTypes({
-        "com.bj58.arch.baseservice.accesslimit.processor.EnableAccessLimit",
-        "com.bj58.arch.baseservice.accesslimit.processor.AccessLimit"
+        "com.bj58.arch.baseservice.accesslimit.processor.EnableAccessLimit"
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_6)
 @AutoService(Processor.class)
@@ -73,8 +73,7 @@ public class AccessLimitProcessor extends AbstractProcessor {
     private Messager messager;
     private Filer filer;
 
-    private Elements elements;
-    private Types types;
+    private final AtomicInteger methodIndex = new AtomicInteger(0);
 
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
@@ -82,8 +81,6 @@ public class AccessLimitProcessor extends AbstractProcessor {
 
         messager = processingEnv.getMessager();
         filer = processingEnv.getFiler();
-        elements = processingEnv.getElementUtils();
-        types = processingEnv.getTypeUtils();
     }
 
     @Override
@@ -91,159 +88,167 @@ public class AccessLimitProcessor extends AbstractProcessor {
         final Set<? extends Element> elements = roundEnv.getElementsAnnotatedWith(EnableAccessLimit.class);
 
         for (final Element element : elements) {
-            checkState(
-                    ElementKind.CLASS == element.getKind(),
-                    "Annotation \"%s\" should only applied to Class level but found on %s",
-                    EnableAccessLimit.class, element.getKind()
-            );
+            if (element.getKind() == ElementKind.CLASS) {
+                final TypeElement typedElement = (TypeElement) element;
 
-            final TypeElement typedElement = (TypeElement) element;
+                final Element parentElement = typedElement.getEnclosingElement();
+                if (ElementKind.PACKAGE != parentElement.getKind()) {
+                    error(
+                            element,
+                            "Annotation \"%s\" should only applied to top level class but found an inner class",
+                            EnableAccessLimit.class
+                    );
+                    return false;
+                }
 
-            final TypeSpec typeSpec = processAccessLimitEnabledClassTypeElement(typedElement);
+                final TypeSpec.Builder typeBuilder =
+                        TypeSpec.classBuilder(GENERATED_CLASS_PREFIX + classNameOf(typedElement));
 
-            writeAsSourceFile(packageNameOf(typedElement), typeSpec);
+                try {
+                    preprocessTypeElement(typedElement, typeBuilder);
+                } catch (Exception e) {
+                    return false;
+                }
+
+                try {
+                    processAccessLimitEnabledClassTypeElement(typedElement, typeBuilder);
+                } catch (Exception e) {
+                    return false;
+                }
+
+                try {
+                    processScfSupportEnabledClassTypeElement(typedElement, typeBuilder);
+                } catch (Exception e) {
+                    return false;
+                }
+
+                try {
+                    writeAsSourceFile(typedElement, typeBuilder.build());
+                } catch (Exception e) {
+                    return false;
+                }
+            } else {
+                error(
+                        element,
+                        "Annotation \"%s\" should only applied to CLASS level but found \"%s\"",
+                        EnableAccessLimit.class, element.getKind()
+                );
+
+                return false;
+            }
         }
 
         return true;
     }
 
-    private void writeAsSourceFile(final String packageName, final TypeSpec type) {
-        final JavaFile javaFile = JavaFile.builder(packageName, type).build();
+    private void error(final Element element, final String format, final Object... args) {
+        messager.printMessage(
+                Diagnostic.Kind.ERROR,
+                String.format(format, args),
+                element
+        );
+    }
+
+    private void writeAsSourceFile(final TypeElement element, final TypeSpec type) {
+        final JavaFile javaFile = JavaFile.builder(packageNameOf(element), type).build();
 
         try {
             javaFile.writeTo(filer);
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to write out Java source file", e);
+            error(element, "Failed to write generated Java source file");
+            throw new IllegalStateException("Failed to write generated Java source file", e);
         }
     }
 
-    private TypeSpec processAccessLimitEnabledClassTypeElement(final TypeElement element) {
-        final String originClassName = classNameOf(element);
-        final TypeSpec.Builder typeBuilder =
-                TypeSpec.classBuilder(GENERATED_CLASS_PREFIX + originClassName);
-
-        final List<AccessLimitMethodConfig> methodConfigs = Lists.newArrayList();
-
-        final List<? extends Element> enclosedElements = element.getEnclosedElements();
-        for (final Element enclosedElement : enclosedElements) {
-            final AccessLimit accessLimitAnno = enclosedElement.getAnnotation(AccessLimit.class);
-            if (null == accessLimitAnno) continue;
-
-            if (ElementKind.METHOD == enclosedElement.getKind()) {
-                final AccessLimitMethodConfig methodConfig = AccessLimitMethodConfig.builder()
-                        .index(methodConfigs.size())
-                        .limit(accessLimitAnno.limit())
-                        .seconds(accessLimitAnno.seconds())
-                        .weight(accessLimitAnno.weight())
-                        .build();
-
-                final MethodSpec methodSpec = processAccessLimitOnMethodTypeElement(
-                        MoreElements.asExecutable(enclosedElement), methodConfig
-                );
-
-                if (null != methodSpec) {
-                    typeBuilder.addMethod(methodSpec);
-
-                    methodConfigs.add(methodConfig);
-                }
-            } else {
-                throw new IllegalStateException(
-                        String.format(
-                                "Annotation \"%s\" should only applied to Method level but found on %s",
-                                AccessLimit.class, enclosedElement.getKind()
-                        )
-                );
-            }
-        }
-
-        final String originPackageName = packageNameOf(element);
-        final ClassName originClass = ClassName.get(originPackageName, originClassName);
-
-        // Check @EnableScfSupport annotation
-        {
-            final EnableScfSupport scfSupportAnno = element.getAnnotation(EnableScfSupport.class);
-            if (null != scfSupportAnno) {
-                typeBuilder.addAnnotation(
-                        AnnotationSpec.builder(ClassName.get("com.bj58.spat.scf.server.contract.annotation", "ServiceContract")).build()
-                );
-            }
-        }
-
-        typeBuilder.superclass(originClass)
+    private void preprocessTypeElement(
+            final TypeElement element, final TypeSpec.Builder typeBuilder
+    ) {
+        typeBuilder.superclass(ClassName.get(element))
                 .addAnnotation(
                         AnnotationSpec.builder(ClassName.get(Generated.class))
                                 .addMember("value", "$S", getClass().getCanonicalName())
                                 .addMember("date", "$S", DateTime.now().toString(ISODateTimeFormat.dateTime()))
                                 .build()
-                )
-                .addField(
+                );
+    }
+
+    private void processScfSupportEnabledClassTypeElement(
+            final TypeElement element, final TypeSpec.Builder typeBuilder
+    ) {
+        // Check @EnableScfSupport annotation
+        final EnableScfSupport scfSupportAnno = element.getAnnotation(EnableScfSupport.class);
+        if (null != scfSupportAnno) {
+            typeBuilder.addAnnotation(
+                    AnnotationSpec.builder(ClassName.get("com.bj58.spat.scf.server.contract.annotation", "ServiceContract"))
+                            .build()
+            );
+        }
+    }
+
+    private void processAccessLimitEnabledClassTypeElement(
+            final TypeElement element, final TypeSpec.Builder typeBuilder
+    ) {
+        final ClassName originClass = ClassName.get(element);
+        typeBuilder.addField(
                         FieldSpec.builder(originClass, adapteeVarName(), Modifier.PRIVATE, Modifier.FINAL)
                                 .initializer("new $T()", originClass)
                                 .build()
+                )
+                .addField(
+                        FieldSpec.builder(ClassName.get(QpsManager.class), managerVarName(), Modifier.PRIVATE, Modifier.FINAL)
+                                .initializer("$T.std()", AccessManagers.class)
+                                .build()
                 );
-        for (final AccessLimitMethodConfig methodConfig : methodConfigs) {
-            typeBuilder.addField(
-                    FieldSpec.builder(
-                            ClassName.get(QpsLimiter.class),
-                            accessLimiterVarName(methodConfig.index()),
-                            Modifier.PRIVATE, Modifier.FINAL
-                    ).initializer(
-                            "new $T($L, $L)",
-                            QpsLimiter.class,
-                            methodConfig.seconds(),
-                            methodConfig.limit()
-                    ).build()
-            );
-        }
 
-        return typeBuilder.build();
+        final List<? extends Element> enclosedElements = element.getEnclosedElements();
+        for (final Element enclosedElement : enclosedElements) {
+            if (ElementKind.METHOD == enclosedElement.getKind()) {
+                processAccessLimitOnMethodTypeElement(
+                        MoreElements.asExecutable(enclosedElement), typeBuilder
+                );
+            } else {
+                /* Do nothing */
+            }
+        }
     }
 
-    @Nullable
-    private MethodSpec processAccessLimitOnMethodTypeElement(
-            final ExecutableElement element, final AccessLimitMethodConfig methodConfig
+    private void processAccessLimitOnMethodTypeElement(
+            final ExecutableElement element, final TypeSpec.Builder typeBuilder
     ) {
-        final String curMethodName = element.getSimpleName().toString();
+        // Only process @AccessLimit annotated methods
+        final AccessLimit accessLimitAnno = element.getAnnotation(AccessLimit.class);
+        if (null == accessLimitAnno) return;
 
-        // Do not add access limit protection for unnecessary modified method
-        Set<Modifier> modifiers = element.getModifiers();
-        if (modifiers.containsAll(ImmutableSet.of(Modifier.ABSTRACT, Modifier.FINAL, Modifier.PRIVATE, Modifier.STATIC))) {
-            return null;
-        }
-
-        final String argsStr;
+        // Do not add access limit protection for method with forbidden modifiers
+        final Set<Modifier> modifiers = element.getModifiers();
         {
-            final List<? extends Element> parameters = element.getParameters();
-            final List<String> parameterNames = Lists.newArrayListWithCapacity(parameters.size());
-            for (final Element parameter : parameters) {
-                parameterNames.add(parameter.getSimpleName().toString());
+            final ImmutableList<Modifier> UNACCEPTABLE_MODIFIERS = ImmutableList.of(
+                    Modifier.ABSTRACT, Modifier.FINAL, Modifier.PRIVATE, Modifier.STATIC
+            );
+            for (final Modifier modifier : UNACCEPTABLE_MODIFIERS) {
+                if (modifiers.contains(modifier)) {
+                    error(element, "Unable to override an method with \"%s\" modifier", modifier);
+                    throw new IllegalStateException("Unable to override an method with \"" + modifier + "\" modifier");
+                }
             }
-            argsStr = Joiner.on(", ").join(parameterNames);
         }
 
+        final String curMethodName = element.getSimpleName().toString();
         final MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(curMethodName);
 
         // Method level modifiers
-        {
-            modifiers = Sets.newLinkedHashSet(modifiers);
-            modifiers.remove(Modifier.ABSTRACT);
-            methodBuilder.addModifiers(modifiers);
-        }
+        methodBuilder.addModifiers(modifiers);
 
-        // Returning
-        {
-            methodBuilder.returns(TypeName.get(element.getReturnType()));
-        }
+        // Returning type
+        methodBuilder.returns(TypeName.get(element.getReturnType()));
 
         // Parameter types
-        {
-            for (TypeParameterElement typeParameterElement : element.getTypeParameters()) {
-                TypeVariable var = (TypeVariable) typeParameterElement.asType();
-                methodBuilder.addTypeVariable(TypeVariableName.get(var));
-            }
+        for (final TypeParameterElement typeParameterElement : element.getTypeParameters()) {
+            TypeVariable var = (TypeVariable) typeParameterElement.asType();
+            methodBuilder.addTypeVariable(TypeVariableName.get(var));
         }
 
-        // Parameters
+        // Parameter args
         {
             final List<ParameterSpec> result = Lists.newArrayList();
             for (final VariableElement parameter : element.getParameters()) {
@@ -263,32 +268,77 @@ public class AccessLimitProcessor extends AbstractProcessor {
         }
 
         // VarArg
-        {
-            methodBuilder.varargs(element.isVarArgs());
-        }
+        methodBuilder.varargs(element.isVarArgs());
 
         // Throwing exceptions
-        {
-            for (TypeMirror thrownType : element.getThrownTypes()) {
-                methodBuilder.addException(TypeName.get(thrownType));
-            }
+        for (TypeMirror thrownType : element.getThrownTypes()) {
+            methodBuilder.addException(TypeName.get(thrownType));
         }
 
         // Implementation code block
-        methodBuilder.addAnnotation(Override.class)
-                .addStatement("$L.acquire($L)", accessLimiterVarName(methodConfig.index()), methodConfig.weight())
-                .beginControlFlow("try")
-                .addStatement("$L.$L(" + argsStr + ")", adapteeVarName(), curMethodName)
-                .endControlFlow()
-                .beginControlFlow("finally")
-                .addStatement("$L.release($L)", accessLimiterVarName(methodConfig.index()), methodConfig.weight())
-                .endControlFlow();
+        {
+            final String argsStr;
+            {
+                final List<? extends Element> parameters = element.getParameters();
+                final List<String> parameterNames = Lists.newArrayListWithCapacity(parameters.size());
+                for (final Element parameter : parameters) {
+                    parameterNames.add(parameter.getSimpleName().toString());
+                }
+                argsStr = Joiner.on(", ").join(parameterNames);
+            }
 
-        return methodBuilder.build();
+            final AccessLimitMethodConfig methodConfig = AccessLimitMethodConfig.builder()
+                    .index(methodIndex.getAndIncrement())
+                    .limit(accessLimitAnno.limit())
+                    .seconds(accessLimitAnno.seconds())
+                    .weight(accessLimitAnno.weight())
+                    .build();
+
+            final String accessLimiterName = accessLimiterVarName(methodConfig.index());
+
+            // Add field named $accessLimiterName
+            typeBuilder.addField(
+                    FieldSpec.builder(
+                            ClassName.get(QpsLimiter.class), accessLimiterName,
+                            Modifier.PRIVATE, Modifier.FINAL
+                    ).initializer(
+                            "new $T($L, $L)",
+                            QpsLimiter.class,
+                            methodConfig.seconds(),
+                            methodConfig.limit()
+                    ).addJavadoc("$T instance for method $S", QpsLimiter.class, curMethodName).build()
+            );
+
+            // Add static init block
+            typeBuilder.addInitializerBlock(
+                    CodeBlock.builder()
+                            .add("/* Register $T instance $S to $T $S */\n", QpsLimiter.class, accessLimiterName, QpsManager.class, managerVarName())
+                            .addStatement("$L.register($S, $N)", managerVarName(), accessLimiterName, accessLimiterName)
+                            .build()
+            );
+
+            methodBuilder.addAnnotation(Override.class)
+                    .addStatement("$L.onEvent(new $T($S, $T.NANOSECONDS.toMicros($T.nanoTime()), $L))",
+                            managerVarName(), AccessEvent.class, accessLimiterName, TimeUnit.class, System.class, methodConfig.weight())
+                    .addStatement("$L.acquire($L)", accessLimiterVarName(methodConfig.index()), methodConfig.weight())
+                    .beginControlFlow("try")
+                    .addStatement("$L.$L(" + argsStr + ")", adapteeVarName(), curMethodName)
+                    .endControlFlow()
+                    .beginControlFlow("finally")
+                    .addStatement("$L.release($L)", accessLimiterName, methodConfig.weight())
+                    .endControlFlow();
+        }
+
+        final MethodSpec methodSpec = methodBuilder.build();
+        typeBuilder.addMethod(methodSpec);
     }
 
     private String adapteeVarName() {
         return "adaptee";
+    }
+
+    private String managerVarName() {
+        return "qpsManager";
     }
 
     private String accessLimiterVarName(final int idx) {
@@ -305,5 +355,4 @@ public class AccessLimitProcessor extends AbstractProcessor {
         final String pkgName = packageNameOf(type);
         return pkgName.isEmpty() ? name : name.substring(pkgName.length() + 1);
     }
-
 }

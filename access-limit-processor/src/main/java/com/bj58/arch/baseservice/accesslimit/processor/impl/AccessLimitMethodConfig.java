@@ -19,7 +19,7 @@ abstract class AccessLimitMethodConfig {
 
     abstract int weight();
 
-    public static Builder builder() {
+    static Builder builder() {
         return new AutoValue_AccessLimitMethodConfig.Builder();
     }
 

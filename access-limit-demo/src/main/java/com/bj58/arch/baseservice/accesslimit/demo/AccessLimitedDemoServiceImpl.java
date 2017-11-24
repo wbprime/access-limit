@@ -1,12 +1,16 @@
 package com.bj58.arch.baseservice.accesslimit.demo;
 
+import com.bj58.arch.baseservice.accesslimit.core.AccessEvent;
+import com.bj58.arch.baseservice.accesslimit.core.AccessManagers;
 import com.bj58.arch.baseservice.accesslimit.core.QpsLimiter;
+import com.bj58.arch.baseservice.accesslimit.core.QpsManager;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * TODO add brief description here
@@ -20,6 +24,7 @@ public class AccessLimitedDemoServiceImpl implements DemoService {
 
     private final DemoService adapteeService;
 
+    private final QpsManager qpsManager;
     private final QpsLimiter accessLimiter4DemoMethod1;
     private final QpsLimiter accessLimiter4DemoMethod2;
 
@@ -29,12 +34,18 @@ public class AccessLimitedDemoServiceImpl implements DemoService {
             final QpsLimiter accessLimiter2
     ) {
         this.adapteeService = adaptee;
+
         this.accessLimiter4DemoMethod1 = accessLimiter1;
         this.accessLimiter4DemoMethod2 = accessLimiter2;
+
+        this.qpsManager = AccessManagers.std();
+        this.qpsManager.register("accessLimiter4DemoMethod1", this.accessLimiter4DemoMethod1);
+        this.qpsManager.register("accessLimiter4DemoMethod2", this.accessLimiter4DemoMethod2);
     }
 
     @Override
     public void demoMethod1(int arg1, String arg2, Map<String, Long> arg3) {
+        qpsManager.onEvent(new AccessEvent("accessLimiter4DemoMethod1", TimeUnit.NANOSECONDS.toMicros(System.nanoTime()), 100));
         LOGGER.debug("demoMethod1 acquiring");
         accessLimiter4DemoMethod1.acquire(100);
         LOGGER.debug("demoMethod1 acquired");
