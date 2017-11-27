@@ -18,7 +18,7 @@ final class AccessEventListenerImpl implements QpsManager {
 
     private ImmutableMap<String, QpsCalculator> calculators = ImmutableMap.of();
 
-    private ImmutableMap<String, QpsAdjustable> items = ImmutableMap.of();
+    private ImmutableMap<String, QpsLimitAdjustable> items = ImmutableMap.of();
 
     @Override
     public void onEvent(final AccessEvent event) {
@@ -29,17 +29,17 @@ final class AccessEventListenerImpl implements QpsManager {
 
         final boolean updated = calculator.add(event.micros(), event.count());
         if (updated) {
-            final QpsAdjustable adjustable = items.get(event.sourceId());
+            final QpsLimitAdjustable adjustable = items.get(event.sourceId());
             adjustable.adjust(calculator.lastQps());
         }
     }
 
     @Override
-    public synchronized void register(final String name, final QpsAdjustable item) {
+    public synchronized void register(final String name, final QpsLimitAdjustable item) {
         checkState(! (calculators.containsKey(name) || items.containsKey(name)),
-                "QpsAdjustable with name \"%s\" was already registered");
+                "QpsLimitAdjustable with name \"%s\" was already registered");
 
-        items = ImmutableMap.<String, QpsAdjustable>builder()
+        items = ImmutableMap.<String, QpsLimitAdjustable>builder()
                 .putAll(items).put(name, item).build();
 
         calculators = ImmutableMap.<String, QpsCalculator>builder()

@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit;
  *
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
-public class QpsLimiter implements QpsAdjustable {
+public class QpsLimiter implements QpsLimitAdjustable {
     private final WalkingClock clock;
     private final SleepingTimer timer;
 
