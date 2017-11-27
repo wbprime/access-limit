@@ -7,7 +7,7 @@ package com.bj58.arch.baseservice.accesslimit.core;
  *
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
-public interface TryQpsManageLeaf extends TryQpsManageNode, QpsAdjustable {
+public interface QpsManageLeaf extends QpsManageNode, QpsAdjustable {
     double qpsLimitMax();
 
     double qpsLimitMin();

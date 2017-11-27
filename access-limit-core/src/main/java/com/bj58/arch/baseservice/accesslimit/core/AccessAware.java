@@ -7,6 +7,6 @@ package com.bj58.arch.baseservice.accesslimit.core;
  *
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
-public interface QpsManager extends AccessEventListener {
-    void register(final String name, final QpsLimitAdjustable item);
+public interface AccessAware {
+    void onEvent(final AccessEvent event);
 }

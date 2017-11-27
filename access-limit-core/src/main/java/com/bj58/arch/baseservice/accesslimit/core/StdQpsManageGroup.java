@@ -2,7 +2,6 @@ package com.bj58.arch.baseservice.accesslimit.core;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.google.common.primitives.Doubles;
 
 import java.util.List;
 
@@ -13,12 +12,12 @@ import java.util.List;
  *
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
-public class TryStdQpsManageGroup implements TryQpsManageGroup {
+public class StdQpsManageGroup implements QpsManageGroup {
     private final String theId;
 
-    private ImmutableMap<String, TryQpsManageLeaf> leaves = ImmutableMap.of();
+    private ImmutableMap<String, QpsManageLeaf> leaves = ImmutableMap.of();
 
-    public TryStdQpsManageGroup(final String theId) {
+    public StdQpsManageGroup(final String theId) {
         this.theId = theId;
     }
 
@@ -29,7 +28,7 @@ public class TryStdQpsManageGroup implements TryQpsManageGroup {
 
     @Override
     public void onQpsChanged(final String id, double v) {
-        final TryQpsManageLeaf leaf = leaves.get(id);
+        final QpsManageLeaf leaf = leaves.get(id);
         if (null != leaf) {
             // Try to adjust QPS for target child item
             final double oldChildLimit = leaf.currentQpsLimit();
@@ -40,8 +39,8 @@ public class TryStdQpsManageGroup implements TryQpsManageGroup {
             if (changing > 0.0 && leaves.size() > 1) {
                 double toChange = changing;
 
-                final List<TryQpsManageLeaf> leavesToChange = Lists.newLinkedList();
-                for (final TryQpsManageLeaf leafToChange : leaves.values()) {
+                final List<QpsManageLeaf> leavesToChange = Lists.newLinkedList();
+                for (final QpsManageLeaf leafToChange : leaves.values()) {
                     if (! leafToChange.id().equals(id)) leavesToChange.add(leafToChange);
                 }
 
@@ -52,7 +51,7 @@ public class TryStdQpsManageGroup implements TryQpsManageGroup {
 
                     int idx = totalCount - 1;
                     while (idx >= 0) {
-                        final TryQpsManageLeaf leafToChange = leavesToChange.get(idx);
+                        final QpsManageLeaf leafToChange = leavesToChange.get(idx);
 
                         final double oldLimit = leafToChange.currentQpsLimit();
                         final double newLimit = leafToChange.changeQpsLimit(oldLimit - eachChange);

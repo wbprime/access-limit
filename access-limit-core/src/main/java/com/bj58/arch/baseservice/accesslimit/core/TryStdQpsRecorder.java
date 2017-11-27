@@ -11,18 +11,18 @@ import java.util.concurrent.TimeUnit;
  *
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
-public class TryStdQpsRecorder implements TryQpsRecorder {
+public class TryStdQpsRecorder implements AccessAware {
     private static final long MICROS_PER_SECOND = TimeUnit.SECONDS.toMicros(1);
 
-    private final TryQpsManageGroup parent;
+    private final QpsManageGroup parent;
 
-    private final TryQpsManageLeaf leaf;
+    private final QpsManageLeaf leaf;
 
     private final QpsCalculator calculator;
 
     public TryStdQpsRecorder(
-            final TryQpsManageLeaf attachedLeaf,
-            final TryQpsManageGroup parentGroup
+            final QpsManageLeaf attachedLeaf,
+            final QpsManageGroup parentGroup
     ) {
         this.parent = parentGroup;
         this.leaf = attachedLeaf;

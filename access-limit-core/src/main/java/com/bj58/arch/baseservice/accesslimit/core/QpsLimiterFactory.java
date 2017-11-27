@@ -9,7 +9,7 @@ import com.google.common.base.Supplier;
  *
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
-public class TryQpsLimiterFactory implements Supplier<QpsLimiter>, TryQpsManageLeaf {
+public class QpsLimiterFactory implements Supplier<QpsLimiter>, QpsManageLeaf {
     private final String theId;
 
     private final Object mutex = new Object();
@@ -20,7 +20,7 @@ public class TryQpsLimiterFactory implements Supplier<QpsLimiter>, TryQpsManageL
     private double theLimitMax;
     private double theLimitMin;
 
-    public TryQpsLimiterFactory(final String theId) {
+    public QpsLimiterFactory(final String theId) {
         this.theId = theId;
 
         this.theLimitMax = 0.0;
