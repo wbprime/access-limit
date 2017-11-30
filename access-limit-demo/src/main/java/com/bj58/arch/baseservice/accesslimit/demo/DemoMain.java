@@ -73,19 +73,37 @@ public class DemoMain {
 
         final CyclicBarrier barrier = new CyclicBarrier(2);
 
-        final Runnable runnable1 = new Method1Runnable(barrier, 5, service);
-        final Runnable runnable2 = new Method2Runnable(barrier, 500, service);
+        {
+            final Runnable runnable1 = new Method1Runnable(barrier, 5, service);
+            final Runnable runnable2 = new Method2Runnable(barrier, 500, service);
 
-        final Thread t1 = new Thread(runnable1);
-        final Thread t2 = new Thread(runnable2);
+            final Thread t1 = new Thread(runnable1);
+            final Thread t2 = new Thread(runnable2);
 
-        t1.setName("demoMethod1");
-        t2.setName("demoMethod2");
+            t1.setName("demoMethod1");
+            t2.setName("demoMethod2");
 
-        t1.start();
-        t2.start();
+            t1.start();
+            t2.start();
 
-        Uninterruptibles.joinUninterruptibly(t1);
-        Uninterruptibles.joinUninterruptibly(t2);
+            Uninterruptibles.joinUninterruptibly(t1);
+            Uninterruptibles.joinUninterruptibly(t2);
+        }
+        {
+            final Runnable runnable1 = new Method1Runnable(barrier, 500, service);
+            final Runnable runnable2 = new Method2Runnable(barrier, 50, service);
+
+            final Thread t1 = new Thread(runnable1);
+            final Thread t2 = new Thread(runnable2);
+
+            t1.setName("demoMethod3");
+            t2.setName("demoMethod4");
+
+            t1.start();
+            t2.start();
+
+            Uninterruptibles.joinUninterruptibly(t1);
+            Uninterruptibles.joinUninterruptibly(t2);
+        }
     }
 }

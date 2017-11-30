@@ -1,5 +1,7 @@
 package com.bj58.arch.baseservice.accesslimit.core;
 
+import com.google.common.primitives.Longs;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,10 +21,6 @@ public class StdQpsManageLeaf implements QpsManageLeaf {
 
     // The soft limit for min/max limit
     private long theMinLimit;
-    private long theMaxLimit;
-
-    // The actual limit
-    // Rule: theLimitMin <= theMinLimit <= theLimit <= theLimitMax
     private long theLimit;
 
     private final Object mutex = new Object();
@@ -42,14 +40,11 @@ public class StdQpsManageLeaf implements QpsManageLeaf {
             final int arrLen
     ) {
         this.context = context;
-        this.theLimit = context.maxLimit();
         this.theMinLimit = context.minLimit();
-        this.theMaxLimit = context.maxLimit();
+        this.theLimit = context.maxLimit();
 
+        group.addChild(this);
         this.parentGroup = group;
-        if (null != this.parentGroup) {
-            this.parentGroup.addChild(this);
-        }
 
         this.lastAccessArr = new long[arrLen];
         for (int i = 0; i < this.lastAccessArr.length; i++) {
@@ -60,43 +55,42 @@ public class StdQpsManageLeaf implements QpsManageLeaf {
 
     @Override
     public void onQpsChanged(final QpsChangeEvent event) {
-        if (null != parentGroup && event.periodInMicros() != 0L) {
-            synchronized (mutex) {
+        synchronized (mutex) {
+            if (event.periodInMicros() != 0L) {
                 accessArrIdx = (accessArrIdx + 1) % lastAccessArr.length;
                 lastAccessArr[accessArrIdx] =
                         (long) (event.permits() * 1.0 / event.periodInMicros() * parentGroup.context().periodInMicros());
+            } else {
+                lastAccessArr[accessArrIdx] += event.permits();
+            }
 
-                adjustMinLimitIfNeeded();
+            adjustMinLimitIfNeeded();
 
-                final long expected = adjustLimitIfNeeded();
+            final long expected = adjustLimitIfNeeded();
 
-                if (expected > theMaxLimit) {
-                    parentGroup.onQpsLimitRequested(
-                            QpsLimitRequestEvent.builder()
-                                    .sourceId(event.sourceId())
-                                    .currentLimit(theMaxLimit)
-                                    .expectedLimit(expected)
-                                    .build()
-                    );
-                }
+            if (expected > theLimit) {
+                parentGroup.onQpsLimitRequested(
+                        QpsLimitRequestEvent.builder()
+                                .sourceId(event.sourceId())
+                                .currentLimit(theLimit)
+                                .expectedLimit(expected)
+                                .build()
+                );
             }
         }
     }
 
     @Override
     public void adjustMaxQpsLimit(final long permits) {
-        final double oldLimit = theMaxLimit;
+        final double oldLimit = theLimit;
         if (permits > context.maxLimit()) {
-            theMaxLimit = context.maxLimit();
+            theLimit = context.maxLimit();
         } else if (permits < theMinLimit) {
-            theMaxLimit = theLimit;
+            theLimit = theMinLimit;
         } else {
-            theMaxLimit = permits;
+            theLimit = permits;
         }
-        LOGGER.debug("QPS limit max changed: [{}] -> [{}]", oldLimit, theMaxLimit);
-
-        LOGGER.debug("QPS limit changed: [{}] -> [{}]", theLimit, theMaxLimit);
-        theLimit = theMaxLimit;
+        LOGGER.debug("QPS limit max for \"{}\" changed: [{}] -> [{}]", context.id(), oldLimit, theLimit);
     }
 
     private void adjustMinLimitIfNeeded() {
@@ -134,35 +128,30 @@ public class StdQpsManageLeaf implements QpsManageLeaf {
     private long adjustLimitIfNeeded() {
         long curLimit = theLimit;
 
-        long max = curLimit;
-        for (long qps : lastAccessArr) {
-            if (qps > max) max = qps;
-        }
+        long max = Longs.max(lastAccessArr);
 
         if (max >= curLimit) {
             curLimit = growLimit(curLimit, max);
         }
 
-        final long wanted = curLimit;
-
-        if (curLimit < theMinLimit) {
-            curLimit = theMinLimit;
-        }
-
-        if (curLimit > theMaxLimit) {
-            curLimit = theMaxLimit;
-        }
-
-        theLimit = curLimit;
-
-        return wanted;
+        return Math.min(curLimit, context.maxLimit());
     }
 
+    // TODO refactor to a Strategy
     private long growLimit(final long cur, final long expected) {
+        return growLimit2(cur, expected);
+    }
+
+    private long growLimit2(final long cur, final long expected) {
+        return context.maxLimit();
+    }
+
+    // TODO refactor to a Strategy
+    private long growLimit1(final long cur, final long expected) {
         final double ratio = expected * 1.0 / context.maxLimit();
 
         double growFactor;
-        if (ratio < 0.2) {
+        if (ratio < 0.3) {
             growFactor = 2.0;
         } else if (ratio < 0.5) {
             growFactor = 1.5;
@@ -176,13 +165,8 @@ public class StdQpsManageLeaf implements QpsManageLeaf {
     }
 
     @Override
-    public long currentQpsLimit() {
+    public long currentQpsLimit(){
         return theLimit;
-    }
-
-    @Override
-    public long qpsLimitMax() {
-        return theMaxLimit;
     }
 
     @Override

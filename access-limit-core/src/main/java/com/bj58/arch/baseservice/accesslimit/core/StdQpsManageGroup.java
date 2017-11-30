@@ -60,12 +60,12 @@ public class StdQpsManageGroup implements Supplier<AccessAware>, QpsManageGroup 
         long existedCurLimit = 0L;
         for (final Map.Entry<String, QpsManageLeaf> entry : leaves.entrySet()) {
             final QpsManageLeaf leaf = entry.getValue();
-            existedCurLimit += leaf.qpsLimitMax();
+            existedCurLimit += leaf.currentQpsLimit();
         }
 
         final long limitLeft = context.maxLimit() - existedCurLimit;
-        if (limitLeft >= node.qpsLimitMax()) {
-            node.adjustMaxQpsLimit(node.qpsLimitMax());
+        if (limitLeft >= node.currentQpsLimit()) {
+            node.adjustMaxQpsLimit(node.currentQpsLimit());
         } else if (limitLeft >= node.qpsLimitMin()) {
             node.adjustMaxQpsLimit(limitLeft);
         } else {
@@ -79,7 +79,7 @@ public class StdQpsManageGroup implements Supplier<AccessAware>, QpsManageGroup 
             final double percent = limitForOthers * 1.0 / existedCurLimit;
             for (final Map.Entry<String, QpsManageLeaf> entry : leaves.entrySet()) {
                 final QpsManageLeaf leaf = entry.getValue();
-                final long curLimit = leaf.qpsLimitMax();
+                final long curLimit = leaf.currentQpsLimit();
                 leaf.adjustMaxQpsLimit((long) (curLimit - (curLimit - leaf.qpsLimitMin()) * percent));
             }
 
@@ -107,7 +107,7 @@ public class StdQpsManageGroup implements Supplier<AccessAware>, QpsManageGroup 
         if (LOGGOR.isDebugEnabled()) {
             for (Map.Entry<String, QpsManageLeaf> entry : leaves.entrySet()) {
                 final QpsManageLeaf leaf = entry.getValue();
-                LOGGOR.debug("Before id(\"{}\");current({});min({});max({})", leaf.id(), leaf.currentQpsLimit(), leaf.qpsLimitMin(), leaf.qpsLimitMax());
+                LOGGOR.debug("Before id(\"{}\");min({});max({})", leaf.id(), leaf.qpsLimitMin(), leaf.currentQpsLimit());
             }
             LOGGOR.debug("onQpsLimitRequested {}", event);
         }
@@ -135,9 +135,9 @@ public class StdQpsManageGroup implements Supplier<AccessAware>, QpsManageGroup 
                 while (idx >= 0) {
                     final QpsManageLeaf leafToChange = leavesToChange.get(idx);
 
-                    final long oldLimit = leafToChange.qpsLimitMax();
+                    final long oldLimit = leafToChange.currentQpsLimit();
                     leafToChange.adjustMaxQpsLimit(oldLimit - eachChange);
-                    final long newLimit = leafToChange.qpsLimitMax();
+                    final long newLimit = leafToChange.currentQpsLimit();
 
                     final long changed = oldLimit - newLimit;
                     if (changed < eachChange) {
@@ -156,7 +156,7 @@ public class StdQpsManageGroup implements Supplier<AccessAware>, QpsManageGroup 
         if (LOGGOR.isDebugEnabled()) {
             for (Map.Entry<String, QpsManageLeaf> entry : leaves.entrySet()) {
                 final QpsManageLeaf leaf = entry.getValue();
-                LOGGOR.debug("After id(\"{}\");current({});min({});max({})", leaf.id(), leaf.currentQpsLimit(), leaf.qpsLimitMin(), leaf.qpsLimitMax());
+                LOGGOR.debug("After id(\"{}\");min({});max({})", leaf.id(), leaf.qpsLimitMin(), leaf.currentQpsLimit());
             }
         }
     }

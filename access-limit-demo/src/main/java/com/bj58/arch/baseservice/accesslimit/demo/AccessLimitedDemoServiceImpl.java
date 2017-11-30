@@ -59,7 +59,7 @@ public class AccessLimitedDemoServiceImpl implements DemoService {
 
         final AccessMethodContext accessMethodContext2 = AccessMethodContext.builder()
                 .id("demoMethod2")
-                .limit(200L, 10L)
+                .limit(1000L, 100L)
                 .weight(1)
                 .build();
 
