@@ -9,7 +9,7 @@ import com.google.common.base.Optional;
  *
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
-public final class StdAccessMonitor implements AccessAware {
+final class StdAccessMonitor implements AccessAware {
     private final QpsChangeAware qpsChangeAware;
 
     private final AccessGroupContext groupContext;
@@ -17,7 +17,7 @@ public final class StdAccessMonitor implements AccessAware {
     private long curMeasureBegMicros;
     private long curMeasureCount;
 
-    public StdAccessMonitor(
+    StdAccessMonitor(
             final AccessGroupContext groupContext,
             final QpsChangeAware aware
     ) {
@@ -64,5 +64,14 @@ public final class StdAccessMonitor implements AccessAware {
 
             return Optional.absent();
         }
+    }
+
+    @Override
+    public String toString() {
+        return "StdAccessMonitor{" +
+                "groupContext=" + groupContext +
+                ", curMeasureBegMicros=" + curMeasureBegMicros +
+                ", curMeasureCount=" + curMeasureCount +
+                '}';
     }
 }

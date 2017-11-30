@@ -32,4 +32,9 @@ class SystemWalkingClock implements WalkingClock {
     public long readCurrentMicros() {
         return System.nanoTime() / NANOS_PER_MICRO;
     }
+
+    @Override
+    public String toString() {
+        return "SystemWalkingClock{}";
+    }
 }

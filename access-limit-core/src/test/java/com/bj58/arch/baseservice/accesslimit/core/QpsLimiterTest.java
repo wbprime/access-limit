@@ -48,7 +48,7 @@ public class QpsLimiterTest {
         mockedTimer = mock(SleepingTimer.class);
         doNothing().when(mockedTimer).sleep(anyLong(), any(TimeUnit.class));
 
-        limiter = new QpsLimiter(seconds, permits, mockedClock, mockedTimer);
+        limiter = new StdQpsLimiter(seconds, permits, mockedClock, mockedTimer);
     }
 
     @Test

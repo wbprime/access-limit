@@ -5,6 +5,7 @@ import com.bj58.arch.baseservice.accesslimit.core.AccessEvent;
 import com.bj58.arch.baseservice.accesslimit.core.AccessGroupContext;
 import com.bj58.arch.baseservice.accesslimit.core.AccessMethodContext;
 import com.bj58.arch.baseservice.accesslimit.core.QpsLimiter;
+import com.bj58.arch.baseservice.accesslimit.core.QpsLimiters;
 import com.bj58.arch.baseservice.accesslimit.core.StdQpsManageGroup;
 import com.bj58.arch.baseservice.accesslimit.core.StdQpsManageLeaf;
 
@@ -28,8 +29,8 @@ public class AccessLimitedDemoServiceImpl implements DemoService {
     private final DemoService adapteeService;
 
     // To manage limit update strategy
-    private final StdQpsManageLeaf manageLeaf4m1;
-    private final StdQpsManageLeaf manageLeaf4m2;
+    private final AccessMethodContext accessMethodContext1;
+    private final AccessMethodContext accessMethodContext2;
 
     // To perform rate limit
     private final QpsLimiter accessLimiter4m1;
@@ -49,24 +50,24 @@ public class AccessLimitedDemoServiceImpl implements DemoService {
 
         final StdQpsManageGroup qpsManageGroup = new StdQpsManageGroup(groupContext);
 
-        final AccessMethodContext accessMethodContext1 = AccessMethodContext.builder()
+        accessMethodContext1 = AccessMethodContext.builder()
                 .id("demoMethod1")
                 .limit(1000L, 10L)
-                .weight(100)
-                .build();
-
-        this.manageLeaf4m1 = new StdQpsManageLeaf(qpsManageGroup, accessMethodContext1);
-
-        final AccessMethodContext accessMethodContext2 = AccessMethodContext.builder()
-                .id("demoMethod2")
-                .limit(1000L, 100L)
                 .weight(1)
                 .build();
 
-        this.manageLeaf4m2 = new StdQpsManageLeaf(qpsManageGroup, accessMethodContext2);
+        final StdQpsManageLeaf manageLeaf4m1 = new StdQpsManageLeaf(qpsManageGroup, accessMethodContext1);
 
-        this.accessLimiter4m1 = new QpsLimiter(groupContext.periodInMicros(), accessMethodContext1.maxLimit());
-        this.accessLimiter4m2 = new QpsLimiter(groupContext.periodInMicros(), accessMethodContext2.maxLimit());
+        accessMethodContext2 = AccessMethodContext.builder()
+                .id("demoMethod2")
+                .limit(1000L, 10L)
+                .weight(1)
+                .build();
+
+        final StdQpsManageLeaf manageLeaf4m2 = new StdQpsManageLeaf(qpsManageGroup, accessMethodContext2);
+
+        this.accessLimiter4m1 = QpsLimiters.create(groupContext, accessMethodContext1, manageLeaf4m1);
+        this.accessLimiter4m2 = QpsLimiters.create(groupContext, accessMethodContext2, manageLeaf4m2);
 
         this.accessAware = qpsManageGroup.get();
     }
@@ -76,21 +77,21 @@ public class AccessLimitedDemoServiceImpl implements DemoService {
         accessAware.onAccessed(
                 AccessEvent.builder().sourceId("demoMethod1")
                         .timeStampInMicros(TimeUnit.NANOSECONDS.toMicros(System.nanoTime()))
-                        .count(manageLeaf4m1.context().weight())
+                        .count(accessMethodContext1.weight())
                         .build()
         );
 
         LOGGER.debug("demoMethod1 acquiring");
 
-        final QpsLimiter qpsLimiter = accessLimiter4m1.limitUpdated(manageLeaf4m1.currentQpsLimit());
-        qpsLimiter.acquire(manageLeaf4m1.context().weight());
+        final QpsLimiter qpsLimiter = accessLimiter4m1;
+        qpsLimiter.acquire(accessMethodContext1.weight());
 
         LOGGER.debug("demoMethod1 acquired");
 
         try {
             adapteeService.demoMethod1(arg1, arg2, arg3);
         } finally {
-            qpsLimiter.release(manageLeaf4m1.context().weight());
+            qpsLimiter.release(accessMethodContext1.weight());
         }
     }
 
@@ -99,21 +100,21 @@ public class AccessLimitedDemoServiceImpl implements DemoService {
         accessAware.onAccessed(
                 AccessEvent.builder().sourceId("demoMethod2")
                         .timeStampInMicros(TimeUnit.NANOSECONDS.toMicros(System.nanoTime()))
-                        .count(manageLeaf4m2.context().weight())
+                        .count(accessMethodContext2.weight())
                         .build()
         );
 
         LOGGER.info("demoMethod2 acquiring");
 
-        final QpsLimiter qpsLimiter = accessLimiter4m2.limitUpdated(manageLeaf4m2.currentQpsLimit());
-        qpsLimiter.acquire(manageLeaf4m2.context().weight());
+        final QpsLimiter qpsLimiter = accessLimiter4m2;
+        qpsLimiter.acquire(accessMethodContext2.weight());
 
         LOGGER.info("demoMethod2 acquired");
 
         try {
             adapteeService.demoMethod2(arg1, arg2, arg3);
         } finally {
-            qpsLimiter.release(manageLeaf4m2.context().weight());
+            qpsLimiter.release(accessMethodContext2.weight());
         }
     }
 }

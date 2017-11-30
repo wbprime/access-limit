@@ -5,6 +5,8 @@ import com.google.common.primitives.Longs;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Arrays;
+
 /**
  * TODO add brief description here
  *
@@ -34,7 +36,7 @@ public class StdQpsManageLeaf implements QpsManageLeaf {
         this(group, context, 2);
     }
 
-    public StdQpsManageLeaf(
+    StdQpsManageLeaf(
             final QpsManageGroup group,
             final AccessMethodContext context,
             final int arrLen
@@ -81,7 +83,7 @@ public class StdQpsManageLeaf implements QpsManageLeaf {
     }
 
     @Override
-    public void adjustMaxQpsLimit(final long permits) {
+    public synchronized void adjustMaxQpsLimit(final long permits) {
         final double oldLimit = theLimit;
         if (permits > context.maxLimit()) {
             theLimit = context.maxLimit();
@@ -139,7 +141,7 @@ public class StdQpsManageLeaf implements QpsManageLeaf {
 
     // TODO refactor to a Strategy
     private long growLimit(final long cur, final long expected) {
-        return growLimit2(cur, expected);
+        return growLimit1(cur, expected);
     }
 
     private long growLimit2(final long cur, final long expected) {
@@ -182,6 +184,18 @@ public class StdQpsManageLeaf implements QpsManageLeaf {
     @Override
     public String id() {
         return context.id();
+    }
+
+    @Override
+    public String toString() {
+        return "StdQpsManageLeaf{" +
+                "parentGroup=" + parentGroup +
+                ", context=" + context +
+                ", theMinLimit=" + theMinLimit +
+                ", theLimit=" + theLimit +
+                ", lastAccessArr=" + Arrays.toString(lastAccessArr) +
+                ", accessArrIdx=" + accessArrIdx +
+                '}';
     }
 }
 

@@ -11,15 +11,15 @@ import java.util.Map;
  *
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
-public final class ComposedAccessMonitor implements AccessAware {
+final class ComposedAccessMonitor implements AccessAware {
     private final ImmutableMap<String, AccessAware> map;
 
-    public ComposedAccessMonitor(final Map<String, AccessAware> map) {
+    ComposedAccessMonitor(final Map<String, AccessAware> map) {
         this.map = ImmutableMap.copyOf(map);
     }
 
     @Override
-    public void onAccessed(AccessEvent event) {
+    public void onAccessed(final AccessEvent event) {
         for (final Map.Entry<String, AccessAware> entry : map.entrySet()) {
             final String id = entry.getKey();
             final AccessAware accessAware = entry.getValue();
@@ -36,5 +36,12 @@ public final class ComposedAccessMonitor implements AccessAware {
                 );
             }
         }
+    }
+
+    @Override
+    public String toString() {
+        return "ComposedAccessMonitor{" +
+                "map=" + map +
+                '}';
     }
 }

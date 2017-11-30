@@ -34,4 +34,9 @@ class SystemSleepingTimer implements SleepingTimer {
             Uninterruptibles.sleepUninterruptibly(duration, unit);
         }
     }
+
+    @Override
+    public String toString() {
+        return "SystemSleepingTimer{}";
+    }
 }
