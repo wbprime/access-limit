@@ -8,10 +8,5 @@ package com.bj58.arch.baseservice.accesslimit.core;
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
 public interface QpsManageNode {
-    /**
-     * Unique id
-     *
-     * @return current id
-     */
     String id();
 }

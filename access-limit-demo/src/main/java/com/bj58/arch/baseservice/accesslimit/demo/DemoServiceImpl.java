@@ -27,14 +27,14 @@ public class DemoServiceImpl implements DemoService {
     private static final Logger LOGGER = LoggerFactory.getLogger(DemoServiceImpl.class);
 
     @Override
-    @AccessLimit(limit = 10)
+    @AccessLimit(max = 20, min = 10)
     @Deprecated
     public void demoMethod1(int arg1, String arg2, @Nonnull Map<String, Long> arg3) {
         LOGGER.info("{}#demoMethod1 invoked", this.getClass());
     }
 
     @Override
-    @AccessLimit(limit = 30, seconds = 3, weight = 16)
+    @AccessLimit(max = 30, min = 10, seconds = 3, weight = 16)
     public void demoMethod2(@CheckForSigned short arg1, @Nullable @CheckForNull byte[] arg2, List<Integer> arg3) {
         LOGGER.info("{}#demoMethod2 invoked", this.getClass());
     }

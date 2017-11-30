@@ -1,9 +1,17 @@
 package com.bj58.arch.baseservice.accesslimit.core;
 
+import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Map;
+
+import static com.google.common.base.Preconditions.checkState;
 
 /**
  * TODO add brief description here
@@ -12,67 +20,144 @@ import java.util.List;
  *
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
-public class StdQpsManageGroup implements QpsManageGroup {
-    private final String theId;
+public class StdQpsManageGroup implements Supplier<AccessAware>, QpsManageGroup {
+    private static final Logger LOGGOR = LoggerFactory.getLogger(StdQpsManageGroup.class);
+
+    private final AccessGroupContext context;
 
     private ImmutableMap<String, QpsManageLeaf> leaves = ImmutableMap.of();
 
-    public StdQpsManageGroup(final String theId) {
-        this.theId = theId;
+    public StdQpsManageGroup(final AccessGroupContext context) {
+        this.context = context;
+    }
+
+    @Override
+    public AccessAware get() {
+        final Map<String, AccessAware> map = Maps.newHashMapWithExpectedSize(leaves.size());
+        for (final Map.Entry<String, QpsManageLeaf> entry : leaves.entrySet()) {
+            map.put(entry.getKey(), new StdAccessMonitor(context, entry.getValue()));
+        }
+
+        return new ComposedAccessMonitor(map);
+    }
+
+    @Override
+    public synchronized void addChild(final QpsManageLeaf node) {
+        // Check sum min limit with group max limit
+        {
+            long v = 0L;
+            for (final Map.Entry<String, QpsManageLeaf> entry : leaves.entrySet()) {
+                final QpsManageLeaf leaf = entry.getValue();
+                v += leaf.qpsLimitMin();
+            }
+
+            checkState(
+                    v + node.qpsLimitMin() <= context.maxLimit(),
+                    "Min limit is not enough"
+            );
+        }
+
+        long existedCurLimit = 0L;
+        for (final Map.Entry<String, QpsManageLeaf> entry : leaves.entrySet()) {
+            final QpsManageLeaf leaf = entry.getValue();
+            existedCurLimit += leaf.qpsLimitMax();
+        }
+
+        final long limitLeft = context.maxLimit() - existedCurLimit;
+        if (limitLeft >= node.qpsLimitMax()) {
+            node.adjustMaxQpsLimit(node.qpsLimitMax());
+        } else if (limitLeft >= node.qpsLimitMin()) {
+            node.adjustMaxQpsLimit(limitLeft);
+        } else {
+            final long limitForNode = node.qpsLimitMin();
+            final long limitForOthers = limitForNode - limitLeft;
+
+            for (final Map.Entry<String, QpsManageLeaf> entry : leaves.entrySet()) {
+                existedCurLimit -= entry.getValue().qpsLimitMin();
+            }
+
+            final double percent = limitForOthers * 1.0 / existedCurLimit;
+            for (final Map.Entry<String, QpsManageLeaf> entry : leaves.entrySet()) {
+                final QpsManageLeaf leaf = entry.getValue();
+                final long curLimit = leaf.qpsLimitMax();
+                leaf.adjustMaxQpsLimit((long) (curLimit - (curLimit - leaf.qpsLimitMin()) * percent));
+            }
+
+            node.adjustMaxQpsLimit(node.qpsLimitMin());
+        }
+
+        final Map<String, QpsManageLeaf> map = Maps.newHashMap();
+        map.putAll(leaves);
+        map.put(node.context().id(), node);
+        this.leaves = ImmutableMap.copyOf(map);
     }
 
     @Override
     public String id() {
-        return theId;
+        return context.id();
     }
 
     @Override
-    public void onQpsChanged(final String id, double v) {
-        final QpsManageLeaf leaf = leaves.get(id);
-        if (null != leaf) {
-            // Try to adjust QPS for target child item
-            final double oldChildLimit = leaf.currentQpsLimit();
-            leaf.adjust(v);
-            final double newChildLimit = leaf.currentQpsLimit();
+    public AccessGroupContext context() {
+        return context;
+    }
 
-            final double changing = newChildLimit - oldChildLimit;
-            if (changing > 0.0 && leaves.size() > 1) {
-                double toChange = changing;
+    @Override
+    public synchronized void onQpsLimitRequested(final QpsLimitRequestEvent event) {
+        if (LOGGOR.isDebugEnabled()) {
+            for (Map.Entry<String, QpsManageLeaf> entry : leaves.entrySet()) {
+                final QpsManageLeaf leaf = entry.getValue();
+                LOGGOR.debug("Before id(\"{}\");current({});min({});max({})", leaf.id(), leaf.currentQpsLimit(), leaf.qpsLimitMin(), leaf.qpsLimitMax());
+            }
+            LOGGOR.debug("onQpsLimitRequested {}", event);
+        }
 
-                final List<QpsManageLeaf> leavesToChange = Lists.newLinkedList();
-                for (final QpsManageLeaf leafToChange : leaves.values()) {
-                    if (! leafToChange.id().equals(id)) leavesToChange.add(leafToChange);
-                }
+        final String id = event.sourceId();
 
-                while (toChange > 0.0 && ! leavesToChange.isEmpty()) {
-                    final int totalCount = leavesToChange.size();
+        final QpsManageLeaf curLeaf = leaves.get(id);
+        if (null == curLeaf) return;
 
-                    final double eachChange = toChange / totalCount;
+        final long changing = event.expectedLimit() - event.currentLimit();
+        if (changing > 0L && !leaves.isEmpty()) {
+            long toChange = changing;
 
-                    int idx = totalCount - 1;
-                    while (idx >= 0) {
-                        final QpsManageLeaf leafToChange = leavesToChange.get(idx);
+            final List<QpsManageLeaf> leavesToChange = Lists.newLinkedList();
+            for (final QpsManageLeaf leafToChange : leaves.values()) {
+                if (!leafToChange.id().equals(id)) leavesToChange.add(leafToChange);
+            }
 
-                        final double oldLimit = leafToChange.currentQpsLimit();
-                        final double newLimit = leafToChange.changeQpsLimit(oldLimit - eachChange);
+            while (toChange > 0L && !leavesToChange.isEmpty()) {
+                final int totalCount = leavesToChange.size();
 
-                        final double changed = newLimit - oldLimit;
-                        if (changed < eachChange) {
-                            leavesToChange.remove(leafToChange);
-                        }
+                final long eachChange = toChange / totalCount;
 
-                        toChange = toChange - changed;
+                int idx = totalCount - 1;
+                while (idx >= 0) {
+                    final QpsManageLeaf leafToChange = leavesToChange.get(idx);
 
-                        idx--;
+                    final long oldLimit = leafToChange.qpsLimitMax();
+                    leafToChange.adjustMaxQpsLimit(oldLimit - eachChange);
+                    final long newLimit = leafToChange.qpsLimitMax();
+
+                    final long changed = oldLimit - newLimit;
+                    if (changed < eachChange) {
+                        leavesToChange.remove(leafToChange);
                     }
-                }
 
-                if (toChange > 0.0) {
-                    // TODO error or warning
+                    toChange = toChange - changed;
+
+                    idx--;
                 }
             }
-        } else {
-            // TODO error or warning
+
+            curLeaf.adjustMaxQpsLimit(event.currentLimit() + (changing - toChange));
+        }
+
+        if (LOGGOR.isDebugEnabled()) {
+            for (Map.Entry<String, QpsManageLeaf> entry : leaves.entrySet()) {
+                final QpsManageLeaf leaf = entry.getValue();
+                LOGGOR.debug("After id(\"{}\");current({});min({});max({})", leaf.id(), leaf.currentQpsLimit(), leaf.qpsLimitMin(), leaf.qpsLimitMax());
+            }
         }
     }
 }

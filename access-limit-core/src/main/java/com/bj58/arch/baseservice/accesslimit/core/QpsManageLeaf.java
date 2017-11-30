@@ -7,20 +7,12 @@ package com.bj58.arch.baseservice.accesslimit.core;
  *
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
-public interface QpsManageLeaf extends QpsManageNode, QpsAdjustable {
-    double qpsLimitMax();
+public interface QpsManageLeaf extends QpsManageNode, QpsChangeAware, QpsLimitAdjustable {
+    long qpsLimitMax();
 
-    double qpsLimitMin();
+    long qpsLimitMin();
 
-    /**
-     * Try to change the cur limit to newVal.
-     *
-     * Return the actual new limit, may not equal to newVal.
-     *
-     * @param newVal
-     * @return
-     */
-    double changeQpsLimit(double newVal);
+    long currentQpsLimit();
 
-    double currentQpsLimit();
+    AccessMethodContext context();
 }

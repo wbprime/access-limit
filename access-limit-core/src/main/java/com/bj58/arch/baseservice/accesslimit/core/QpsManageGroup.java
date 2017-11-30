@@ -7,5 +7,8 @@ package com.bj58.arch.baseservice.accesslimit.core;
  *
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
-public interface QpsManageGroup extends QpsManageNode, QpsAware {
+public interface QpsManageGroup extends QpsManageNode, QpsLimitRequestAware {
+    void addChild(final QpsManageLeaf node);
+
+    AccessGroupContext context();
 }

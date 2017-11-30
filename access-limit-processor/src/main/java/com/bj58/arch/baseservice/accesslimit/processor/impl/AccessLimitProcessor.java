@@ -1,15 +1,12 @@
 package com.bj58.arch.baseservice.accesslimit.processor.impl;
 
 import com.google.auto.common.MoreElements;
-import com.google.auto.service.AutoService;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
 import com.bj58.arch.baseservice.accesslimit.core.AccessEvent;
-import com.bj58.arch.baseservice.accesslimit.core.AccessManagers;
 import com.bj58.arch.baseservice.accesslimit.core.QpsLimiter;
-import com.bj58.arch.baseservice.accesslimit.core.QpsManager;
 import com.bj58.arch.baseservice.accesslimit.processor.AccessLimit;
 import com.bj58.arch.baseservice.accesslimit.processor.EnableAccessLimit;
 import com.bj58.arch.baseservice.accesslimit.processor.EnableScfSupport;
@@ -38,11 +35,7 @@ import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
-import javax.annotation.processing.Processor;
 import javax.annotation.processing.RoundEnvironment;
-import javax.annotation.processing.SupportedAnnotationTypes;
-import javax.annotation.processing.SupportedSourceVersion;
-import javax.lang.model.SourceVersion;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
@@ -63,11 +56,11 @@ import javax.tools.Diagnostic;
  *
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
-@SupportedAnnotationTypes({
-        "com.bj58.arch.baseservice.accesslimit.processor.EnableAccessLimit"
-})
-@SupportedSourceVersion(SourceVersion.RELEASE_6)
-@AutoService(Processor.class)
+//@SupportedAnnotationTypes({
+//        "com.bj58.arch.baseservice.accesslimit.processor.EnableAccessLimit"
+//})
+//@SupportedSourceVersion(SourceVersion.RELEASE_6)
+//@AutoService(Processor.class)
 public class AccessLimitProcessor extends AbstractProcessor {
     private static final String GENERATED_CLASS_PREFIX = "AccessLimit_";
     private Messager messager;
@@ -189,16 +182,16 @@ public class AccessLimitProcessor extends AbstractProcessor {
             final TypeElement element, final TypeSpec.Builder typeBuilder
     ) {
         final ClassName originClass = ClassName.get(element);
-        typeBuilder.addField(
-                        FieldSpec.builder(originClass, adapteeVarName(), Modifier.PRIVATE, Modifier.FINAL)
-                                .initializer("new $T()", originClass)
-                                .build()
-                )
-                .addField(
-                        FieldSpec.builder(ClassName.get(QpsManager.class), managerVarName(), Modifier.PRIVATE, Modifier.FINAL)
-                                .initializer("$T.std()", AccessManagers.class)
-                                .build()
-                );
+//        typeBuilder.addField(
+//                        FieldSpec.builder(originClass, adapteeVarName(), Modifier.PRIVATE, Modifier.FINAL)
+//                                .initializer("new $T()", originClass)
+//                                .build()
+//                )
+//                .addField(
+//                        FieldSpec.builder(ClassName.get(QpsManager.class), managerVarName(), Modifier.PRIVATE, Modifier.FINAL)
+//                                .initializer("$T.std()", AccessManagers.class)
+//                                .build()
+//                );
 
         final List<? extends Element> enclosedElements = element.getEnclosedElements();
         for (final Element enclosedElement : enclosedElements) {
@@ -289,7 +282,8 @@ public class AccessLimitProcessor extends AbstractProcessor {
 
             final AccessLimitMethodConfig methodConfig = AccessLimitMethodConfig.builder()
                     .index(methodIndex.getAndIncrement())
-                    .limit(accessLimitAnno.limit())
+                    .minLimit(accessLimitAnno.min())
+                    .maxLimit(accessLimitAnno.max())
                     .seconds(accessLimitAnno.seconds())
                     .weight(accessLimitAnno.weight())
                     .build();
@@ -305,20 +299,21 @@ public class AccessLimitProcessor extends AbstractProcessor {
                             "new $T($L, $L)",
                             QpsLimiter.class,
                             methodConfig.seconds(),
-                            methodConfig.limit()
+                            methodConfig.maxLimit(),
+                            methodConfig.minLimit()
                     ).addJavadoc("$T instance for method $S", QpsLimiter.class, curMethodName).build()
             );
 
             // Add static init block
             typeBuilder.addInitializerBlock(
                     CodeBlock.builder()
-                            .add("/* Register $T instance $S to $T $S */\n", QpsLimiter.class, accessLimiterName, QpsManager.class, managerVarName())
+//                            .add("/* Register $T instance $S to $T $S */\n", QpsLimiter.class, accessLimiterName, QpsManager.class, managerVarName())
                             .addStatement("$L.register($S, $N)", managerVarName(), accessLimiterName, accessLimiterName)
                             .build()
             );
 
             methodBuilder.addAnnotation(Override.class)
-                    .addStatement("$L.onEvent(new $T($S, $T.NANOSECONDS.toMicros($T.nanoTime()), $L))",
+                    .addStatement("$L.onAccessed(new $T($S, $T.NANOSECONDS.toMicros($T.nanoTime()), $L))",
                             managerVarName(), AccessEvent.class, accessLimiterName, TimeUnit.class, System.class, methodConfig.weight())
                     .addStatement("$L.acquire($L)", accessLimiterVarName(methodConfig.index()), methodConfig.weight())
                     .beginControlFlow("try")

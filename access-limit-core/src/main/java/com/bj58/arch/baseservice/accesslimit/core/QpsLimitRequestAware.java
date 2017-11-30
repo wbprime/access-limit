@@ -7,6 +7,6 @@ package com.bj58.arch.baseservice.accesslimit.core;
  *
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
-public interface QpsAware {
-    void onQpsChanged(final String id, double v);
+public interface QpsLimitRequestAware {
+    void onQpsLimitRequested(final QpsLimitRequestEvent event);
 }

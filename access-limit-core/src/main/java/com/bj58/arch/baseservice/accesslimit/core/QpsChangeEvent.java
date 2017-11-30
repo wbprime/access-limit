@@ -10,25 +10,25 @@ import com.google.auto.value.AutoValue;
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
 @AutoValue
-public abstract class AccessEvent {
+public abstract class QpsChangeEvent {
     public abstract String sourceId();
 
-    public abstract long timeStampInMicros();
+    public abstract long periodInMicros();
 
-    public abstract int count();
+    public abstract long permits();
 
     public static Builder builder() {
-        return new AutoValue_AccessEvent.Builder();
+        return new AutoValue_QpsChangeEvent.Builder();
     }
 
     @AutoValue.Builder
     public abstract static class Builder {
-        public abstract Builder sourceId(final String sourceId);
+        public abstract Builder sourceId(String sourceId);
 
-        public abstract Builder timeStampInMicros(long micros);
+        public abstract Builder periodInMicros(long periodInMicros);
 
-        public abstract Builder count(int count);
+        public abstract Builder permits(long permits);
 
-        public abstract AccessEvent build();
+        public abstract QpsChangeEvent build();
     }
 }

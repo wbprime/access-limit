@@ -11,7 +11,7 @@ public interface QpsLimitAdjustable {
     /**
      * Adjust to QPS limit value {@code limit}.
      *
-     * @param limit QPS value
+     * @param permits access permits
      */
-    void adjust(final double limit);
+    void adjustMaxQpsLimit(final long permits);
 }
