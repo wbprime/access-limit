@@ -7,10 +7,8 @@ package com.bj58.arch.baseservice.accesslimit.core;
  *
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
-public interface QpsLimiter {
-    void acquire(final int required);
+public interface QpsManageGroup extends QpsManageNode, QpsLimitRequestAware {
+    void addChild(final QpsManageLeaf node);
 
-    void release(final int released);
-
-    QpsLimiter limitUpdated(long newLimit);
+    AccessGroupContext context();
 }

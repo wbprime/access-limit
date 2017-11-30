@@ -3,10 +3,17 @@ package com.bj58.arch.baseservice.accesslimit.demo;
 import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.Uninterruptibles;
 
-import java.util.concurrent.BrokenBarrierException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.List;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * TODO add brief description here
@@ -16,85 +23,114 @@ import java.util.concurrent.CyclicBarrier;
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
 public class DemoMain {
+    private static final Logger LOGGER = LoggerFactory.getLogger(DemoMain.class);
+
     private static abstract class MethodRunnable implements Runnable {
         final CyclicBarrier cyclicBarrier;
         final DemoService demoService;
 
-        MethodRunnable(final CyclicBarrier barrier, final DemoService demoService) {
+        final int count;
+
+        MethodRunnable(final CyclicBarrier barrier, final int repeated, final DemoService demoService) {
             this.cyclicBarrier = barrier;
             this.demoService = demoService;
+            this.count = repeated;
         }
 
         void syncWait() {
-            try {
-                cyclicBarrier.await();
-            } catch (InterruptedException e) {
-                throw new IllegalStateException(e);
-            } catch (BrokenBarrierException e) {
-                throw new IllegalStateException(e);
-            }
+//            try {
+//                cyclicBarrier.await();
+//            } catch (InterruptedException e) {
+//                throw new IllegalStateException(e);
+//            } catch (BrokenBarrierException e) {
+//                throw new IllegalStateException(e);
+//            }
         }
 
     }
 
     private static class Method1Runnable extends MethodRunnable implements Runnable {
-        Method1Runnable(final CyclicBarrier barrier, final DemoService demoService) {
-            super(barrier, demoService);
+        Method1Runnable(final CyclicBarrier barrier, final int repeated, final DemoService demoService) {
+            super(barrier, repeated, demoService);
         }
 
         @Override
         public void run() {
-            syncWait();
-            demoService.demoMethod1(1, "2", ImmutableMap.<String, Long>of());
-            syncWait();
-            demoService.demoMethod1(2, "20", ImmutableMap.<String, Long>of());
-            syncWait();
-            demoService.demoMethod1(3, "200", ImmutableMap.<String, Long>of());
-            syncWait();
-            demoService.demoMethod1(4, "2000", ImmutableMap.<String, Long>of());
-            syncWait();
-            demoService.demoMethod1(5, "20000", ImmutableMap.<String, Long>of());
+            for (int i = 0; i < count; i++) {
+                syncWait();
+                demoService.demoMethod1(1, "2", ImmutableMap.<String, Long>of());
+            }
+            LOGGER.info("Thread finished");
         }
     }
 
     private static class Method2Runnable extends MethodRunnable implements Runnable {
-        Method2Runnable(final CyclicBarrier barrier, final DemoService demoService) {
-            super(barrier, demoService);
+        Method2Runnable(final CyclicBarrier barrier, final int repeated, final DemoService demoService) {
+            super(barrier, repeated, demoService);
         }
 
         @Override
         public void run() {
-            syncWait();
-            demoService.demoMethod2((short)1, "2".getBytes(Charsets.UTF_8), ImmutableList.<Integer>of());
-            syncWait();
-            demoService.demoMethod2((short)2, "20".getBytes(Charsets.UTF_8), ImmutableList.<Integer>of());
-            syncWait();
-            demoService.demoMethod2((short)3, "200".getBytes(Charsets.UTF_8), ImmutableList.<Integer>of());
-            syncWait();
-            demoService.demoMethod2((short)4, "2000".getBytes(Charsets.UTF_8), ImmutableList.<Integer>of());
-            syncWait();
-            demoService.demoMethod2((short)5, "20000".getBytes(Charsets.UTF_8), ImmutableList.<Integer>of());
+            for (int i = 0; i < count; i++) {
+                syncWait();
+                demoService.demoMethod2((short)1, "2".getBytes(Charsets.UTF_8), ImmutableList.<Integer>of());
+            }
+            LOGGER.info("Thread finished");
         }
     }
 
-    public static void main(final String[] args) {
-        final DemoService service = new AccessLimit_DemoServiceImpl();
-//        final DemoService service = new AccessLimitedDemoServiceImpl(
-//                new DemoServiceImpl(), new QpsLimiter(1, 100), new QpsLimiter(1, 200)
-//        );
+    public static void main(final String[] args) throws Exception {
+//        final DemoService service = new AccessLimit_DemoServiceImpl();
+        final DemoService service = new AccessLimitedDemoServiceImpl();
 
         final CyclicBarrier barrier = new CyclicBarrier(2);
 
-        final Runnable runnable1 = new Method1Runnable(barrier, service);
-        final Runnable runnable2 = new Method2Runnable(barrier, service);
+        final ExecutorService executorService = Executors.newFixedThreadPool(6);
 
-        final Thread t1 = new Thread(runnable1);
-        final Thread t2 = new Thread(runnable2);
+        final List<Future<?>> list = Lists.newArrayList();
 
-        t1.start();
-        t2.start();
+        {
+            final Runnable runnable = new Method1Runnable(barrier, 5, service);
 
-        Uninterruptibles.joinUninterruptibly(t1);
-        Uninterruptibles.joinUninterruptibly(t2);
+            final Future<?> future = executorService.submit(runnable);
+            list.add(future);
+        }
+        {
+            final Runnable runnable = new Method2Runnable(barrier, 50, service);
+
+            final Future<?> future = executorService.submit(runnable);
+            list.add(future);
+        }
+        {
+            final Runnable runnable = new Method1Runnable(barrier, 50, service);
+
+            final Future<?> future = executorService.submit(runnable);
+            list.add(future);
+        }
+        {
+            final Runnable runnable = new Method2Runnable(barrier, 5, service);
+
+            final Future<?> future = executorService.submit(runnable);
+            list.add(future);
+        }
+        {
+            final Runnable runnable = new Method1Runnable(barrier, 500, service);
+
+            final Future<?> future = executorService.submit(runnable);
+            list.add(future);
+        }
+        {
+            final Runnable runnable = new Method2Runnable(barrier, 500, service);
+
+            final Future<?> future = executorService.submit(runnable);
+            list.add(future);
+        }
+
+        // Wait all to finish
+        for (final Future<?> future : list) {
+            Uninterruptibles.getUninterruptibly(future);
+        }
+
+        executorService.shutdown();
     }
 }

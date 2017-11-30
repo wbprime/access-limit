@@ -13,13 +13,15 @@ import com.google.auto.value.AutoValue;
 abstract class AccessLimitMethodConfig {
     abstract int index();
 
-    abstract int limit();
+    abstract int maxLimit();
+
+    abstract int minLimit();
 
     abstract int seconds();
 
     abstract int weight();
 
-    public static Builder builder() {
+    static Builder builder() {
         return new AutoValue_AccessLimitMethodConfig.Builder();
     }
 
@@ -27,7 +29,9 @@ abstract class AccessLimitMethodConfig {
     public abstract static class Builder {
         public abstract Builder index(int index);
 
-        public abstract Builder limit(int limit);
+        public abstract Builder maxLimit(int maxLimit);
+
+        public abstract Builder minLimit(int minLimit);
 
         public abstract Builder seconds(int seconds);
 

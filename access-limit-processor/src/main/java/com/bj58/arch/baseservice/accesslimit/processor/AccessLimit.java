@@ -17,9 +17,31 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Documented
 public @interface AccessLimit {
-    int limit();
+    /**
+     * Max permits for {@code seconds} seconds, i.e. max qps = {@code max / seconds}.
+     *
+     * @return max permits
+     */
+    int max();
 
+    /**
+     * Min permits for {@code seconds} seconds, i.e. min qps = {@code max / seconds}.
+     *
+     * @return min permits
+     */
+    int min() default 0;
+
+    /**
+     * Measure time unit for QPS
+     *
+     * @return seconds
+     */
     int seconds() default 1;
 
+    /**
+     * Permits per step (i.e., method invocation).
+     *
+     * @return permits per step
+     */
     int weight() default 1;
 }
