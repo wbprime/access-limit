@@ -11,13 +11,13 @@ import com.google.auto.value.AutoValue;
  */
 @AutoValue
 abstract class AccessLimitMethodConfig {
-    abstract int index();
+    abstract String groupName();
 
-    abstract int maxLimit();
+    abstract String methodName();
 
-    abstract int minLimit();
+    abstract int maxPermits();
 
-    abstract int seconds();
+    abstract int minPermits();
 
     abstract int weight();
 
@@ -27,13 +27,13 @@ abstract class AccessLimitMethodConfig {
 
     @AutoValue.Builder
     public abstract static class Builder {
-        public abstract Builder index(int index);
+        public abstract Builder groupName(final String name);
 
-        public abstract Builder maxLimit(int maxLimit);
+        public abstract Builder methodName(final String name);
 
-        public abstract Builder minLimit(int minLimit);
+        public abstract Builder maxPermits(int maxLimit);
 
-        public abstract Builder seconds(int seconds);
+        public abstract Builder minPermits(int minLimit);
 
         public abstract Builder weight(int weight);
 
