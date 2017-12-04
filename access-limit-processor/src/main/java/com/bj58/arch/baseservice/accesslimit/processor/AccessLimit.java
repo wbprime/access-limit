@@ -22,7 +22,7 @@ public @interface AccessLimit {
      *
      * @return name of parent group
      */
-    String group() default "";
+    String group();
 
     /**
      * Max permits for {@code seconds} seconds, i.e. max qps = {@code max / seconds}.

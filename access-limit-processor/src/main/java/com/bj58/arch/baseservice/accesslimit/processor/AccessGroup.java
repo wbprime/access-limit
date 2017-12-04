@@ -14,7 +14,7 @@ import java.lang.annotation.Target;
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
 @Retention(RetentionPolicy.SOURCE)
-@Target({ElementType.METHOD, ElementType.TYPE})
+@Target(ElementType.TYPE)
 @Documented
 public @interface AccessGroup {
     /**

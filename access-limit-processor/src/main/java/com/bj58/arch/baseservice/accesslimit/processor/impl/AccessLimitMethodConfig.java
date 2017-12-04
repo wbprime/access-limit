@@ -15,6 +15,10 @@ abstract class AccessLimitMethodConfig {
 
     abstract String methodName();
 
+    final String uuid() {
+        return "m" + methodIndex() + methodName();
+    }
+
     abstract int methodIndex();
 
     abstract int maxPermits();

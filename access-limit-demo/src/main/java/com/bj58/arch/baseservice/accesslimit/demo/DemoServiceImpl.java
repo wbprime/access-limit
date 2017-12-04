@@ -24,21 +24,31 @@ import javax.annotation.Nullable;
  */
 @EnableAccessLimit
 //@EnableScfSupport
-@AccessGroup(name = "test", max = 1000)
+@AccessGroup(name = "parent", max = 1000)
 public class DemoServiceImpl implements DemoService {
     private static final Logger LOGGER = LoggerFactory.getLogger(DemoServiceImpl.class);
 
+    @AccessGroup(name = "test", max = 100)
+    private static class TestGroup {}
+
+    @AccessGroup(name = "product", max = 1000)
+    private static class ParentGroup {}
+
     @Override
-    @AccessLimit(max = 20, min = 10)
+    @AccessLimit(group = "product", max = 20, min = 10)
     @Deprecated
-    @AccessGroup(name = "test1", max = 1000)
     public void demoMethod1(int arg1, String arg2, @Nonnull Map<String, Long> arg3) {
         LOGGER.info("{}#demoMethod1 invoked", this.getClass());
     }
 
     @Override
-    @AccessLimit(max = 30, min = 10, weight = 16)
+    @AccessLimit(group = "test", max = 30, min = 10, weight = 16)
     public void demoMethod2(@CheckForSigned short arg1, @Nullable @CheckForNull byte[] arg2, List<Integer> arg3) {
         LOGGER.info("{}#demoMethod2 invoked", this.getClass());
+    }
+
+    @AccessLimit(group = "test", max = 30, min = 10, weight = 16)
+    public void demoMethod2(@CheckForSigned @CheckForNull byte[] arg1, List<Integer> arg2) {
+
     }
 }

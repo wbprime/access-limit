@@ -5,6 +5,7 @@ import com.google.auto.service.AutoService;
 import com.google.common.base.Joiner;
 import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
@@ -40,6 +41,7 @@ import org.joda.time.DateTime;
 import org.joda.time.format.ISODateTimeFormat;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,7 +63,6 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
-import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.TypeParameterElement;
 import javax.lang.model.element.VariableElement;
@@ -85,6 +86,8 @@ public class AccessLimitProcessor extends AbstractProcessor {
     private Messager messager;
     private Filer filer;
 
+    private Map<String, AccessLimitGroupConfig> theGroups = ImmutableMap.of();
+
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
         super.init(processingEnv);
@@ -95,91 +98,80 @@ public class AccessLimitProcessor extends AbstractProcessor {
 
     @Override
     public boolean process(final Set<? extends TypeElement> annotations, final RoundEnvironment roundEnv) {
-        final Set<? extends Element> elements = roundEnv.getElementsAnnotatedWith(EnableAccessLimit.class);
+        if (roundEnv.processingOver()) {
+            generateGroupsClass(theGroups.values());
+        } else {
+            // Process @EnableAccessLimit annotated elements
+            final Set<? extends Element> elements = roundEnv.getElementsAnnotatedWith(EnableAccessLimit.class);
+            processEnableAccessLimitAnnotatedElements(elements);
+        }
 
-        final Map<String, AccessLimitGroupConfig> groups = Maps.newHashMap();
+        // never claim annotation, because who knows what other processors want?
+        return false;
+    }
 
-        final List<AccessLimitMethodConfig> methods = Lists.newArrayList();
+    private void processEnableAccessLimitAnnotatedElements(final Collection<? extends Element> elements) {
+        if (elements.isEmpty()) return;
 
         for (final Element element : elements) {
             if (element.getKind() != ElementKind.CLASS) {
                 error(element,
                         "Annotation \"%s\" should only applied to CLASS level but found \"%s\"",
                         EnableAccessLimit.class, element.getKind());
-
-                return false;
             }
 
-            // Collect all @AccessGroup annotated classes
-            {
-                final Optional<AccessLimitGroupConfig> newGroup = tryParseAccessLimitGroup(element);
-                if (newGroup.isPresent()) {
-                    final AccessLimitGroupConfig groupConfig = newGroup.get();
-                    if (groups.containsKey(groupConfig.name())) {
-                        error(element, "AccessGroup \"%s\" had been defined already !!!",
-                                groupConfig.name());
-                    } else {
-                        groups.put(groupConfig.name(), groupConfig);
-                    }
-                }
-            }
+            final TypeElement typeElement = MoreElements.asType(element);
 
-            // Process all methods in target CLASS element
-            final List<? extends Element> enclosedElements = element.getEnclosedElements();
-            for (final Element enclosedElement : enclosedElements) {
-                if (ElementKind.METHOD != enclosedElement.getKind()) {
-                    if (! checkAccessLimitGroupAnnotation(element) || ! checkAccessLimitMethodAnnotation(element))
-                        return false;
+            // Process @AccessGroup annotated elements
+            processAndLoadAccessGroupAnnotatedElement(typeElement);
 
-                    /* Skipped */
-                    continue;
-                }
+            generateSubClass(typeElement, theGroups);
+        }
+    }
 
-                final ExecutableElement methodElement = MoreElements.asExecutable(enclosedElement);
+    private void processAndLoadAccessGroupAnnotatedElement(final TypeElement typeElement) {
+        final Map<String, AccessLimitGroupConfig> groups = Maps.newHashMap(theGroups);
 
-                // Collect all @AccessGroup annotated methods info
-                {
-                    final Optional<AccessLimitGroupConfig> newGroup = tryParseAccessLimitGroup(methodElement);
-                    if (newGroup.isPresent()) {
-                        final AccessLimitGroupConfig groupConfig = newGroup.get();
-                        if (groups.containsKey(groupConfig.name())) {
-                            error(methodElement,
-                                    "AccessGroup \"%s\" had been defined already !!!",
-                                    groupConfig.name());
-                        } else {
-                            groups.put(groupConfig.name(), groupConfig);
-                        }
-                    }
-                }
-
-                // Collect all @AccessLimit annotated methods info
-                {
-                    final Optional<AccessLimitMethodConfig> newMethod = tryParseAccessLimitMethod(methodElement);
-                    if (newMethod.isPresent()) {
-                        methods.add(newMethod.get());
-                    }
+        // Top level type
+        {
+            final Optional<AccessLimitGroupConfig> newGroup = tryParseAccessLimitGroup(typeElement);
+            if (newGroup.isPresent()) {
+                final AccessLimitGroupConfig groupConfig = newGroup.get();
+                if (groups.containsKey(groupConfig.name())) {
+                    error(typeElement, "AccessGroup \"%s\" had been defined already !!!",
+                            groupConfig.name());
+                } else {
+                    groups.put(groupConfig.name(), groupConfig);
                 }
             }
         }
 
-        generateGroupsClass(groups.values());
+        for (final Element element : typeElement.getEnclosedElements()) {
+            // Inner level type
 
-        for (final Element element : elements) {
-            if (element.getKind() == ElementKind.CLASS) {
-                generateSubClass(MoreElements.asType(element), groups);
+            final Optional<AccessLimitGroupConfig> newGroup = tryParseAccessLimitGroup(element);
+            if (newGroup.isPresent()) {
+                final AccessLimitGroupConfig groupConfig = newGroup.get();
+                if (groups.containsKey(groupConfig.name())) {
+                    error(element, "AccessGroup \"%s\" had been defined already !!!",
+                            groupConfig.name());
+                } else {
+                    groups.put(groupConfig.name(), groupConfig);
+                }
             }
         }
 
-        return true;
+        this.theGroups = ImmutableMap.copyOf(groups);
     }
 
     private void generateSubClass(
             final TypeElement element,
             final Map<String, AccessLimitGroupConfig> groups
     ) {
-        final ClassName className = ClassName.get(element);
+        final String packageName = Utils.packageNameOf(element);
+        final String combinedClassName = Utils.combinedClassNameOf(element, "_");
 
-        final TypeSpec.Builder builder = TypeSpec.classBuilder(Constants.GENERATED_CLASS_PREFIX + className.simpleName())
+        final TypeSpec.Builder builder = TypeSpec.classBuilder(Constants.GENERATED_CLASS_PREFIX + combinedClassName)
                 .superclass(ClassName.get(element))
                 .addAnnotation(
                         AnnotationSpec.builder(ClassName.get(Generated.class))
@@ -200,27 +192,27 @@ public class AccessLimitProcessor extends AbstractProcessor {
             final ExecutableElement methodElement = MoreElements.asExecutable(enclosedElement);
 
             // Collect all @AccessLimit annotated methods info
-            methods = parseAndGenerateAccessLimitMethod(methodElement, builder, methods);
+            methods = parseAndGenerateAccessLimitMethod(methodElement, builder, methods, groups);
         }
 
         // Add fields
         generateFields(element, builder);
 
         // Add Constructor
-        generateConstructor(element, builder, methods, groups);
+        generateConstructor(element, builder, methods);
 
         // Write to output Java file
-        final JavaFile javaFile = JavaFile.builder(className.packageName(), builder.build()).build();
+        final JavaFile javaFile = JavaFile.builder(packageName, builder.build()).build();
         try {
             javaFile.writeTo(filer);
         } catch (IOException e) {
-            error(null, "Failed to write generated Java source file");
-            throw new IllegalStateException("Failed to write generated Java source file", e);
+            error(element, "Failed to write generated Java source file \"%s.%s\"", packageName, combinedClassName);
         }
     }
 
+    private void generateGroupsClass(final Collection<AccessLimitGroupConfig> groups) {
+        if (groups.isEmpty()) return;
 
-    private void generateGroupsClass(final Iterable<AccessLimitGroupConfig> groups) {
         final TypeSpec.Builder builder = TypeSpec.classBuilder(Constants.GENERATED_GROUPS_CLASS_NAME);
         builder.addAnnotation(
                 AnnotationSpec.builder(ClassName.get(Generated.class))
@@ -234,7 +226,7 @@ public class AccessLimitProcessor extends AbstractProcessor {
             final CodeBlock.Builder fieldInit = CodeBlock.builder();
             for (final AccessLimitGroupConfig group : groups) {
                 fieldInit.addStatement(
-                        "$T.register(new $T($T.builder().id($S).maxLimit($LL).periodInMicros($LL).build()))",
+                        "$T.register(new $T(\n$T.builder()\n.id($S)\n.maxLimit($LL)\n.periodInMicros($LL)\n.build()))",
                         QpsGroups.class, StdQpsManageGroup.class, AccessGroupContext.class,
                         group.name(), group.maxPermits(), group.micros()
                 );
@@ -271,20 +263,19 @@ public class AccessLimitProcessor extends AbstractProcessor {
         }
 
         // Write to output Java file
-        final JavaFile javaFile = JavaFile.builder(Constants.GENERATED_FALLBACK_PACKAGE, builder.build()).build();
+        final TypeSpec typeSpec = builder.build();
+        final JavaFile javaFile = JavaFile.builder(Constants.GENERATED_FALLBACK_PACKAGE, typeSpec).build();
         try {
             javaFile.writeTo(filer);
         } catch (IOException e) {
-            error(null, "Failed to write generated Java source file");
-            throw new IllegalStateException("Failed to write generated Java source file", e);
+            error(null, "Failed to write generated Java source file \"%s.%s\"", Constants.GENERATED_FALLBACK_PACKAGE, typeSpec.name);
         }
     }
 
     private void generateConstructor(
             final TypeElement element,
             final TypeSpec.Builder typeBuilder,
-            final List<AccessLimitMethodConfig> methods,
-            final Map<String, AccessLimitGroupConfig> groups
+            final List<AccessLimitMethodConfig> methods
     ) {
         final CodeBlock.Builder codeBuilder = CodeBlock.builder()
                 .addStatement("super()");
@@ -322,18 +313,18 @@ public class AccessLimitProcessor extends AbstractProcessor {
             codeBuilder.add("\n").addStatement(
                     "final $T $L = $T.get($S)",
                     QpsManageGroup.class, groupName, QpsGroups.class,
-                    methodConfig.methodName()
+                    methodConfig.groupName()
             ).addStatement(
-                    "final $T $L = new $T($L, $T.builder().id($S).limit($LL, $LL).weight($L).build())",
+                    "final $T $L = new $T($L, \n$T.builder()\n.id($S)\n.limit($LL, $LL)\n.weight($L)\n.build())",
                     QpsManageLeaf.class, leafName, StdQpsManageLeaf.class,
                     groupName, AccessMethodContext.class,
-                    methodConfig.methodName(),
+                    methodConfig.uuid(),
                     methodConfig.maxPermits(),
                     methodConfig.minPermits(),
                     methodConfig.weight()
             ).addStatement(
                     "$L.put($S, $T.create($L.context(), $L))",
-                    accessAwares, methodConfig.methodName(), AccessAwares.class, groupName, leafName
+                    accessAwares, methodConfig.uuid(), AccessAwares.class, groupName, leafName
             ).addStatement(
                     "$L = $T.create($L.context(), $L)",
                     Constants.qpsLimiterVarName(i), QpsLimiters.class, groupName, leafName
@@ -367,10 +358,18 @@ public class AccessLimitProcessor extends AbstractProcessor {
 
     private List<AccessLimitMethodConfig> parseAndGenerateAccessLimitMethod(
             final ExecutableElement element, final TypeSpec.Builder typeBuilder,
-            final List<AccessLimitMethodConfig> handled
+            final List<AccessLimitMethodConfig> handled,
+            final Map<String, AccessLimitGroupConfig> groups
     ) {
         final AccessLimit anno = element.getAnnotation(AccessLimit.class);
         if (null == anno) {
+            return handled;
+        }
+
+        final String groupName = anno.group();
+
+        if (! groups.containsKey(anno.group())) {
+            error(element, "No group named \"%s\" defined", groupName);
             return handled;
         }
 
@@ -382,7 +381,9 @@ public class AccessLimitProcessor extends AbstractProcessor {
             );
             for (final Modifier modifier : UNACCEPTABLE_MODIFIERS) {
                 if (modifiers.contains(modifier)) {
-                    error(element, "Unable to override an method with \"%s\" modifier", modifier);
+                    error(element,
+                            "Annotation \"%s\" can not be applied to method \"%s\" with modifier \"%s\"",
+                            modifier);
                 }
             }
         }
@@ -390,7 +391,7 @@ public class AccessLimitProcessor extends AbstractProcessor {
         final AccessLimitMethodConfig methodConfig = AccessLimitMethodConfig.builder()
                 .methodName(element.getSimpleName().toString())
                 .methodIndex(handled.size())
-                .groupName(anno.group())
+                .groupName(groupName)
                 .maxPermits(anno.max())
                 .minPermits(anno.min())
                 .weight(anno.weight())
@@ -444,9 +445,9 @@ public class AccessLimitProcessor extends AbstractProcessor {
         {
             // Line 1
             methodBuilder.addStatement(
-                    "$L.onAccessed($T.builder().sourceId($S).timeStampInMicros($T.NANOSECONDS.toMicros($T.nanoTime())).count($L).build())",
+                    "$L.onAccessed(\n$T.builder()\n.sourceId($S)\n.timeStampInMicros($T.NANOSECONDS.toMicros($T.nanoTime()))\n.count($L)\n.build())",
                     Constants.GENERATED_ACCESS_AWARE_VAR_NAME, AccessEvent.class,
-                    methodConfig.methodName(), TimeUnit.class, System.class,
+                    methodConfig.uuid(), TimeUnit.class, System.class,
                     methodConfig.weight()
             );
 
@@ -470,7 +471,7 @@ public class AccessLimitProcessor extends AbstractProcessor {
                 final String argsStr = Joiner.on(", ").join(parameterNames);
 
                 methodBuilder.beginControlFlow("try")
-                        .addStatement("$L.$L(" + argsStr + ")", adapteeVarName(), curMethodName)
+                        .addStatement("$L.$L(" + argsStr + ")", Constants.GENERATED_ADAPTEE_VAR_NAME, curMethodName)
                         .endControlFlow()
                         .beginControlFlow("finally")
                         .addStatement(
@@ -545,20 +546,5 @@ public class AccessLimitProcessor extends AbstractProcessor {
                 String.format(format, args),
                 element
         );
-    }
-
-    private String adapteeVarName() {
-        return "adaptee";
-    }
-
-    private static String packageNameOf(final TypeElement type) {
-        final PackageElement packageElement = MoreElements.getPackage(type);
-        return packageElement.getQualifiedName().toString();
-    }
-
-    private static String classNameOf(final TypeElement type) {
-        final String name = type.getQualifiedName().toString();
-        final String pkgName = packageNameOf(type);
-        return pkgName.isEmpty() ? name : name.substring(pkgName.length() + 1);
     }
 }

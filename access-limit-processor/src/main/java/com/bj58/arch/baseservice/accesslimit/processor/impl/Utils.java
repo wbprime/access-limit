@@ -1,6 +1,9 @@
 package com.bj58.arch.baseservice.accesslimit.processor.impl;
 
 import com.google.auto.common.MoreElements;
+import com.google.common.base.Joiner;
+
+import com.squareup.javapoet.ClassName;
 
 import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
@@ -24,5 +27,10 @@ final class Utils {
         final String name = type.getQualifiedName().toString();
         final String pkgName = packageNameOf(type);
         return pkgName.isEmpty() ? name : name.substring(pkgName.length() + 1);
+    }
+
+    static String combinedClassNameOf(final TypeElement type, final String join) {
+        final ClassName className = ClassName.get(type);
+        return Joiner.on(join).join(className.simpleNames());
     }
 }
