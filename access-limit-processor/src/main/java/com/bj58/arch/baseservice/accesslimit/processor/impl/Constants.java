@@ -7,9 +7,20 @@ package com.bj58.arch.baseservice.accesslimit.processor.impl;
  *
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
-public final class Constants {
+final class Constants {
     private Constants() { throw new AssertionError("Construction forbidden"); }
 
-    public static final String GUAVA_COLLECT_PACKAGE = "com.google.common.collect";
-    public static final String IMMUTABLE_MAP = "ImmutableMap";
+    static final String GENERATED_FALLBACK_PACKAGE = "com.bj58.arch.baseservice.accesslimit.generated";
+
+    static final String GENERATED_GROUPS_CLASS_NAME = "AccessLimit_Groups";
+
+    static final String GENERATED_CLASS_PREFIX = "AccessLimit_";
+
+    static final String GENERATED_ADAPTEE_VAR_NAME = "adaptee";
+    static final String GENERATED_ACCESS_AWARE_VAR_NAME = "accessAware";
+    static final String GENERATED_QPS_LIMITER_VAR_NAME = "qpsLimiters";
+
+    static String qpsLimiterVarName(final int idx) {
+        return GENERATED_QPS_LIMITER_VAR_NAME + "[" + idx + "]";
+    }
 }

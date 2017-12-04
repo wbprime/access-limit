@@ -50,10 +50,10 @@ public final class QpsLimiters {
     }
 
     public static QpsLimiter create(
-            final AccessGroupContext groupContext, final AccessMethodContext context, final QpsManageLeaf leaf
+            final AccessGroupContext groupContext, final QpsManageLeaf leaf
     ) {
         return new LeafAdaptedQpsLimiter(
-                create(groupContext, context), leaf
+                create(groupContext, leaf.context()), leaf
         );
     }
 }

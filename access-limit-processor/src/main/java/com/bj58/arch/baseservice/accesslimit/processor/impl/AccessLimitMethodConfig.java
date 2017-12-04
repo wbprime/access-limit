@@ -15,6 +15,8 @@ abstract class AccessLimitMethodConfig {
 
     abstract String methodName();
 
+    abstract int methodIndex();
+
     abstract int maxPermits();
 
     abstract int minPermits();
@@ -30,6 +32,8 @@ abstract class AccessLimitMethodConfig {
         public abstract Builder groupName(final String name);
 
         public abstract Builder methodName(final String name);
+
+        public abstract Builder methodIndex(final int index);
 
         public abstract Builder maxPermits(int maxLimit);
 

@@ -39,7 +39,6 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
-import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.TypeParameterElement;
 import javax.lang.model.element.VariableElement;
@@ -60,7 +59,6 @@ import javax.tools.Diagnostic;
 //@SupportedSourceVersion(SourceVersion.RELEASE_6)
 //@AutoService(Processor.class)
 public class AccessLimitProcessor2 extends AbstractProcessor {
-    private static final String GENERATED_CLASS_PREFIX = "AccessLimit_";
     private Messager messager;
     private Filer filer;
 
@@ -93,7 +91,7 @@ public class AccessLimitProcessor2 extends AbstractProcessor {
                 }
 
                 final TypeSpec.Builder typeBuilder =
-                        TypeSpec.classBuilder(GENERATED_CLASS_PREFIX + classNameOf(typedElement));
+                        TypeSpec.classBuilder(Constants.GENERATED_CLASS_PREFIX + Utils.classNameOf(typedElement));
 
                 try {
                     preprocessTypeElement(typedElement, typeBuilder);
@@ -141,7 +139,7 @@ public class AccessLimitProcessor2 extends AbstractProcessor {
     }
 
     private void writeAsSourceFile(final TypeElement element, final TypeSpec type) {
-        final JavaFile javaFile = JavaFile.builder(packageNameOf(element), type).build();
+        final JavaFile javaFile = JavaFile.builder(Utils.packageNameOf(element), type).build();
 
         try {
             javaFile.writeTo(filer);
@@ -286,7 +284,7 @@ public class AccessLimitProcessor2 extends AbstractProcessor {
                     .weight(accessLimitAnno.weight())
                     .build();
 
-//            final String accessLimiterName = accessLimiterVarName(methodConfig.index());
+//            final String accessLimiterName = qpsLimiterVarName(methodConfig.index());
             final String accessLimiterName = ";";
 
             // Add field named $accessLimiterName
@@ -314,7 +312,7 @@ public class AccessLimitProcessor2 extends AbstractProcessor {
             methodBuilder.addAnnotation(Override.class)
                     .addStatement("$L.onAccessed(new $T($S, $T.NANOSECONDS.toMicros($T.nanoTime()), $L))",
                             managerVarName(), AccessEvent.class, accessLimiterName, TimeUnit.class, System.class, methodConfig.weight())
-//                    .addStatement("$L.acquire($L)", accessLimiterVarName(methodConfig.index()), methodConfig.weight())
+//                    .addStatement("$L.acquire($L)", qpsLimiterVarName(methodConfig.index()), methodConfig.weight())
                     .beginControlFlow("try")
                     .addStatement("$L.$L(" + argsStr + ")", adapteeVarName(), curMethodName)
                     .endControlFlow()
@@ -339,14 +337,4 @@ public class AccessLimitProcessor2 extends AbstractProcessor {
         return "accessLimiter4Method" + idx;
     }
 
-    private static String packageNameOf(final TypeElement type) {
-        final PackageElement packageElement = MoreElements.getPackage(type);
-        return packageElement.getQualifiedName().toString();
-    }
-
-    private static String classNameOf(final TypeElement type) {
-        final String name = type.getQualifiedName().toString();
-        final String pkgName = packageNameOf(type);
-        return pkgName.isEmpty() ? name : name.substring(pkgName.length() + 1);
-    }
 }
