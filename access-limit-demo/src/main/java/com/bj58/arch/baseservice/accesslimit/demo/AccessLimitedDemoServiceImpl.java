@@ -66,8 +66,8 @@ public class AccessLimitedDemoServiceImpl implements DemoService {
 
         final StdQpsManageLeaf manageLeaf4m2 = new StdQpsManageLeaf(qpsManageGroup, accessMethodContext2);
 
-        this.accessLimiter4m1 = QpsLimiters.create(groupContext, accessMethodContext1, manageLeaf4m1);
-        this.accessLimiter4m2 = QpsLimiters.create(groupContext, accessMethodContext2, manageLeaf4m2);
+        this.accessLimiter4m1 = QpsLimiters.create(groupContext, manageLeaf4m1);
+        this.accessLimiter4m2 = QpsLimiters.create(groupContext, manageLeaf4m2);
 
         this.accessAware = qpsManageGroup.get();
     }

@@ -14,34 +14,27 @@ import java.lang.annotation.Target;
  * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
  */
 @Retention(RetentionPolicy.SOURCE)
-@Target(ElementType.METHOD)
+@Target(ElementType.TYPE)
 @Documented
-public @interface AccessLimit {
+public @interface AccessGroup {
     /**
-     * Parent group name.
+     * Group name
      *
-     * @return name of parent group
+     * @return name
      */
-    String group();
+    String name();
 
     /**
-     * Max permits for {@code seconds} seconds, i.e. max qps = {@code max / seconds}.
+     * Max permits in {@code seconds} seconds for methods in this group, i.e. max qps = {@code max / seconds}.
      *
      * @return max permits
      */
     int max();
 
     /**
-     * Min permits for {@code seconds} seconds, i.e. min qps = {@code max / seconds}.
+     * Measure time unit for QPS
      *
-     * @return min permits
+     * @return seconds
      */
-    int min() default 0;
-
-    /**
-     * Permits per step (i.e., method invocation).
-     *
-     * @return permits per step
-     */
-    int weight() default 1;
+    int seconds() default 1;
 }
