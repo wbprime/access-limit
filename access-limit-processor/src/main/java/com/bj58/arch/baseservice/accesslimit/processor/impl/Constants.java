@@ -3,9 +3,9 @@ package com.bj58.arch.baseservice.accesslimit.processor.impl;
 /**
  * TODO add brief description here
  *
- * Copyright © 2016 58ganji Beijing spat team. All rights reserved.
+ * Copyright © 2019 wangbo.im. All rights reserved.
  *
- * @author Elvis Wang [wangbo12 -AT- 58ganji -DOT- com]
+ * @author Elvis Wang [mail _AT_ wangbo _DOT_ im]
  */
 final class Constants {
     private Constants() { throw new AssertionError("Construction forbidden"); }
